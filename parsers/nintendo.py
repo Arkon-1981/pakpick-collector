@@ -48,7 +48,11 @@ def parse_list_page(html: str) -> list[ParsedItem]:
     tiles = soup.select("li.product-item, .product-item")
 
     for tile in tiles:
-        link = tile.select_one("a.product-item-link, a[href*='store.nintendo.co.kr']")
+        # 타일 안에는 앵커가 여러 개 있다 (이미지 링크가 먼저 나옴).
+        # 이름이 들어있는 product-item-link를 우선으로 잡아야 title이 안 비게 된다.
+        link = tile.select_one("a.product-item-link") or tile.select_one(
+            "a[href*='store.nintendo.co.kr']"
+        )
         if link is None:
             continue
 
@@ -57,7 +61,8 @@ def parse_list_page(html: str) -> list[ParsedItem]:
         if not m:
             continue
         product_id = m.group(1)
-        title = link.get_text(strip=True) or None
+        name_el = tile.select_one(".product-item-name") or link
+        title = name_el.get_text(strip=True) or None
 
         img = tile.select_one("img.product-image-photo, img")
         image_url = img.get("src") if img else None
