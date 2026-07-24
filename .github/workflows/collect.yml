@@ -45,6 +45,11 @@ jobs:
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
 
+      # 닌텐도는 봇 차단 우회를 위해 실제 크롬 브라우저가 필요할 수 있음
+      - name: 크롬 브라우저 설치 (닌텐도 전용)
+        if: matrix.platform == 'nintendo'
+        run: python -m playwright install --with-deps chromium
+
       - name: 수집 실행
         if: github.event_name == 'schedule' || github.event.inputs.platform == 'all' || github.event.inputs.platform == matrix.platform
         env:
