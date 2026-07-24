@@ -16,7 +16,21 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 RAW_BUCKET = os.environ.get("RAW_BUCKET", "raw-store-data")
-REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "1.5"))
+
+# ----- 안전 수칙 관련 설정 -----
+
+# 요청 사이 기본 대기 시간(초). 실제 대기는 이 값~2배 사이 무작위로,
+# 사람이 페이지를 넘겨 보는 속도(기본 6~12초)가 된다.
+REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "6.0"))
+
+# robots.txt(사이트의 로봇 출입 규칙) 준수 여부 — 기본 켜짐
+RESPECT_ROBOTS = os.environ.get("RESPECT_ROBOTS", "true").lower() != "false"
+
+# 한 번 실행에서 보낼 수 있는 최대 요청 수 (폭주 방지 상한선)
+MAX_REQUESTS_PER_RUN = int(os.environ.get("MAX_REQUESTS_PER_RUN", "1500"))
+
+# 차단성 응답(202/403/429)이 연속으로 이 횟수만큼 오면 즉시 중단
+CONSECUTIVE_BLOCK_LIMIT = int(os.environ.get("CONSECUTIVE_BLOCK_LIMIT", "3"))
 
 STORE_REGION = "KR"
 

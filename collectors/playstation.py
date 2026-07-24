@@ -35,6 +35,12 @@ class PlaystationCollector(BaseCollector):
     def collect(self) -> None:
         seen_ids: set[str] = set()
 
+        # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
+        try:
+            fetch(f"{BASE}/ko-kr")
+        except Exception:
+            pass  # 워밍업 실패는 무시하고 진행
+
         # 1. deals 허브 페이지
         result = fetch(DEALS_URL)
         if result.status_code != 200:

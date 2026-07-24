@@ -46,6 +46,12 @@ class NintendoCollector(BaseCollector):
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
 
+        # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
+        try:
+            fetch("https://store.nintendo.co.kr/")
+        except Exception:
+            pass  # 워밍업 실패는 무시하고 진행
+
         for page in range(1, MAX_PAGES + 1):
             url = LIST_URL.format(page=page)
             result = self._get_page(url)
@@ -121,7 +127,18 @@ class NintendoCollector(BaseCollector):
         return self._fetch_with_browser(url)
 
     def _fetch_with_browser(self, url: str) -> FetchResult | None:
-        """Playwright로 실제 크롬을 띄워 페이지를 읽는다 (봇 차단 우회용)."""
+        """Playwright로 실제 크롬을 띄워 페이지를 읽는다 (봇 차단 우회용).
+
+        안전장치: robots.txt 준수 + 사람 같은 간격 유지 +
+        이미지/동영상/폰트는 내려받지 않아 상대 서버 부담 최소화.
+        """
+        from common import robots
+        from common.http_client import polite_wait
+
+        if not robots.is_allowed(url):
+            self.record_parse_error(url, "robots.txt 규칙상 금지된 주소")
+            return None
+
         try:
             if self._page is None:
                 from playwright.sync_api import sync_playwright
@@ -133,8 +150,16 @@ class NintendoCollector(BaseCollector):
                     user_agent=config.USER_AGENT,
                     viewport={"width": 1280, "height": 900},
                 )
+                # 이미지·동영상·폰트 요청 차단 — 필요한 HTML만 받는다
+                context.route(
+                    "**/*",
+                    lambda route: route.abort()
+                    if route.request.resource_type in ("image", "media", "font")
+                    else route.continue_(),
+                )
                 self._page = context.new_page()
 
+            polite_wait()  # 사람 같은 간격 유지 (6~12초)
             self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
             # 상품 타일이 그려질 때까지 최대 20초 대기 (없어도 계속 진행)
             try:

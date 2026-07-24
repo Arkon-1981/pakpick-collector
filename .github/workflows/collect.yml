@@ -13,8 +13,9 @@ on:
   push:
     branches: [main]
   schedule:
-    # GitHub cron은 UTC 기준. 한국 시간 09:00 / 21:00 = UTC 00:00 / 12:00
-    - cron: "0 0,12 * * *"
+    # GitHub cron은 UTC 기준. 한국 시간 새벽 03:17 / 오후 15:17
+    # (이용자가 적은 시간대 + 정각을 피해 부담 최소화)
+    - cron: "17 6,18 * * *"
   workflow_dispatch:
     inputs:
       platform:
@@ -28,6 +29,11 @@ jobs:
   collect:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # 같은 플랫폼 수집이 겹쳐서 두 번 돌지 않도록 방지
+    # (수동 실행과 예약 실행이 겹치면 스토어에 2배 요청이 가는 것을 차단)
+    concurrency:
+      group: collect-${{ matrix.platform }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false        # 한 플랫폼이 실패해도 나머지는 계속
       matrix:
