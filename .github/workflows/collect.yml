@@ -1,0 +1,50 @@
+# 하루 2번(한국 시간 오전 9시 / 오후 9시) 자동으로 수집기를 실행한다.
+#
+# 사용 전 준비 (GitHub 저장소 → Settings → Secrets and variables → Actions):
+#   SUPABASE_URL                = Supabase Project URL
+#   SUPABASE_SERVICE_ROLE_KEY   = Supabase secret 키 (sb_secret_...)
+#
+# 수동 실행: GitHub 저장소 → Actions 탭 → "collect" → Run workflow
+
+name: collect
+
+on:
+  schedule:
+    # GitHub cron은 UTC 기준. 한국 시간 09:00 / 21:00 = UTC 00:00 / 12:00
+    - cron: "0 0,12 * * *"
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "수집할 플랫폼"
+        required: false
+        default: "all"
+        type: choice
+        options: [all, nintendo, playstation, xbox]
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false        # 한 플랫폼이 실패해도 나머지는 계속
+      matrix:
+        platform: [nintendo, playstation, xbox]
+    steps:
+      - name: 코드 내려받기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 수집 실행
+        if: github.event_name == 'schedule' || github.event.inputs.platform == 'all' || github.event.inputs.platform == matrix.platform
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/collect.py --platform ${{ matrix.platform }}

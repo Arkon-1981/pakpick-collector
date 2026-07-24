@@ -1,0 +1,175 @@
+"""플레이스테이션 스토어 파서.
+
+PS 스토어 페이지의 <script id="__NEXT_DATA__"> 안 JSON에서 상품을 추출한다.
+
+JSON 구조 (핵심 부분):
+  props.apolloState  안에  "Product:UP0001-PPSA12345_00-XXXX" 형태의 키로
+  상품 객체가 들어 있고, 각 객체에 name, price, media 등이 있다.
+
+price 객체 예시:
+  {
+    "basePrice": "₩89,800",        ← 정가
+    "discountedPrice": "₩67,350",  ← 할인가
+    "discountText": "-25%",
+    "endTime": "1753801140000",    ← 할인 종료 (밀리초 타임스탬프)
+    "isFree": false, "isExclusive": false, ...
+  }
+
+⚠️ 구조가 바뀔 수 있으므로 apolloState에서 못 찾으면
+JSON 전체를 재귀 탐색하는 예비 로직도 갖춰 두었다.
+원본 HTML은 항상 저장되므로 파서 수정 후 재처리 가능.
+"""
+import json
+import re
+from datetime import datetime, timezone
+
+from bs4 import BeautifulSoup
+
+from collectors.base import ParsedItem
+from common.logging_util import get_logger
+
+logger = get_logger(__name__)
+
+PRICE_NUM_RE = re.compile(r"[\d,]+")
+
+
+def extract_next_data(html: str) -> dict | None:
+    """HTML에서 __NEXT_DATA__ JSON을 꺼낸다."""
+    soup = BeautifulSoup(html, "lxml")
+    tag = soup.find("script", id="__NEXT_DATA__")
+    if tag is None or not tag.string:
+        return None
+    try:
+        return json.loads(tag.string)
+    except json.JSONDecodeError:
+        logger.warning("__NEXT_DATA__ JSON 파싱 실패")
+        return None
+
+
+def _parse_krw(text: str | None) -> float | None:
+    """"₩89,800" → 89800.0 / "무료" → 0"""
+    if not text:
+        return None
+    if "무료" in text or text.strip().lower() == "free":
+        return 0.0
+    m = PRICE_NUM_RE.search(text)
+    if not m:
+        return None
+    return float(m.group(0).replace(",", ""))
+
+
+def _parse_epoch_ms(value) -> str | None:
+    """밀리초 타임스탬프 → ISO 문자열"""
+    if not value:
+        return None
+    try:
+        ts = int(value) / 1000.0
+        return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    except (ValueError, TypeError, OSError):
+        return None
+
+
+def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
+    """apolloState의 Product 노드 1개를 ParsedItem으로 변환한다."""
+    product_id = node.get("id") or key.split(":", 1)[-1]
+    if not product_id:
+        return None
+
+    title = node.get("name")
+
+    # price는 참조(__ref)로 연결돼 있을 수도, 바로 들어있을 수도 있다
+    price_node = node.get("price")
+    if isinstance(price_node, dict) and "__ref" in price_node:
+        price_node = apollo.get(price_node["__ref"], {})
+    if not isinstance(price_node, dict):
+        price_node = {}
+
+    base = _parse_krw(price_node.get("basePrice"))
+    discounted = _parse_krw(price_node.get("discountedPrice"))
+    discount_text = price_node.get("discountText")  # 예: "-25%"
+    discount_percent = None
+    if discount_text:
+        m = re.search(r"(\d+(?:\.\d+)?)", discount_text)
+        if m:
+            discount_percent = float(m.group(1))
+
+    is_on_sale = (
+        base is not None and discounted is not None and discounted < base
+    )
+
+    # 이미지: media 배열에서 대표 이미지 추출
+    image_url = None
+    media = node.get("media")
+    if isinstance(media, list):
+        for m_item in media:
+            if isinstance(m_item, dict) and "__ref" in m_item:
+                m_item = apollo.get(m_item["__ref"], {})
+            if isinstance(m_item, dict) and m_item.get("url"):
+                image_url = m_item["url"]
+                if m_item.get("role") in ("MASTER", "GAMEHUB_COVER_ART"):
+                    break
+
+    store_url = f"https://store.playstation.com/ko-kr/product/{product_id}"
+
+    # 노드 전체를 보존 (플랫폼, 등급, 타입 등 모든 필드)
+    extracted = {
+        "apollo_key": key,
+        "node": node,
+        "price_raw": price_node,
+    }
+
+    return ParsedItem(
+        store_product_id=product_id,
+        title=title,
+        store_url=store_url,
+        image_url=image_url,
+        regular_price=base,
+        sale_price=discounted if is_on_sale else None,
+        final_price=discounted if discounted is not None else base,
+        discount_percent=discount_percent,
+        sale_end_at=_parse_epoch_ms(price_node.get("endTime")),
+        is_on_sale=is_on_sale,
+        extracted_data=extracted,
+    )
+
+
+def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
+    items: list[ParsedItem] = []
+
+    apollo = (next_data.get("props") or {}).get("apolloState") or {}
+    if apollo:
+        for key, node in apollo.items():
+            if not isinstance(node, dict):
+                continue
+            if key.startswith("Product:") or node.get("__typename") == "Product":
+                try:
+                    item = _product_from_node(key, node, apollo)
+                    if item:
+                        items.append(item)
+                except Exception:
+                    logger.exception("PS 상품 노드 파싱 실패: %s", key)
+
+    if items:
+        return items
+
+    # 예비: apolloState가 없거나 비었으면 JSON 전체를 재귀 탐색
+    logger.warning("apolloState에서 상품을 못 찾음 — 전체 JSON 재귀 탐색 시도")
+    found: list[ParsedItem] = []
+
+    def walk(obj):
+        if isinstance(obj, dict):
+            if obj.get("__typename") == "Product" and obj.get("id"):
+                try:
+                    item = _product_from_node(f"Product:{obj['id']}", obj, {})
+                    if item:
+                        found.append(item)
+                except Exception:
+                    pass
+            for v in obj.values():
+                walk(v)
+        elif isinstance(obj, list):
+            for v in obj:
+                walk(v)
+
+    walk(next_data)
+    return found
