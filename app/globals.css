@@ -1,0 +1,182 @@
+/* =====================================================================
+   Pakpick 디자인 토큰
+   클로드 디자인 시안(Wanted Design System 기반)에서 이식.
+   폰트: 본문·헤드라인 Roboto / 숫자(가격)는 Pretendard + tabular-nums
+   ===================================================================== */
+
+:root {
+  /* --- 원자 색상 --- */
+  --color-cool-neutral-99: #171719;
+  --color-cool-neutral-95: #1b1c1e;
+  --color-cool-neutral-90: #25272a;
+  --color-cool-neutral-80: #37383c;
+  --color-cool-neutral-70: #46474b;
+  --color-cool-neutral-60: #70737c;
+  --color-cool-neutral-50: #989ba2;
+  --color-cool-neutral-40: #aeb0b6;
+  --color-cool-neutral-30: #c2c4c8;
+  --color-cool-neutral-20: #dbdcdf;
+  --color-cool-neutral-10: #f4f4f5;
+  --color-cool-neutral-5: #f7f7f8;
+
+  --color-blue-100: #002c99;
+  --color-blue-90: #003bcc;
+  --color-blue-80: #005eeb;
+  --color-blue-70: #0066ff;
+  --color-blue-60: #3385ff;
+  --color-blue-50: #5c9cff;
+  --color-blue-40: #85b3ff;
+  --color-blue-30: #adcaff;
+  --color-blue-20: #d4e2ff;
+  --color-blue-10: #eaf2fe;
+
+  --color-purple-90: #5b23d2;
+  --color-purple-70: #9747ff;
+  --color-purple-10: #f0ecfe;
+
+  --color-green-100: #006622;
+  --color-green-90: #00a036;
+  --color-green-80: #00bf40;
+  --color-green-10: #e5f8ec;
+
+  --color-red-100: #b30000;
+  --color-red-80: #ff4242;
+  --color-red-70: #ff6666;
+  --color-red-10: #ffeaea;
+
+  --color-yellow-80: #ffb800;
+  --color-yellow-10: #fff7e0;
+
+  --color-cyan-80: #0098b2;
+  --color-cyan-10: #e0f5f8;
+
+  /* --- 의미 색상 (라이트 테마) --- */
+  --color-fg-strong: var(--color-cool-neutral-99);
+  --color-fg-normal: var(--color-cool-neutral-80);
+  --color-fg-neutral: var(--color-cool-neutral-60);
+  --color-fg-alternate: var(--color-cool-neutral-50);
+  --color-fg-assistive: var(--color-cool-neutral-40);
+  --color-fg-disable: var(--color-cool-neutral-30);
+  --color-fg-on-color: #ffffff;
+
+  --color-bg-base: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-alternate: var(--color-cool-neutral-5);
+  --color-bg-neutral: var(--color-cool-neutral-10);
+  --color-bg-inverse: var(--color-cool-neutral-99);
+
+  --color-line-normal: var(--color-cool-neutral-20);
+  --color-line-neutral: var(--color-cool-neutral-10);
+  --color-line-strong: var(--color-cool-neutral-30);
+
+  --color-primary: var(--color-blue-70);
+  --color-primary-hover: var(--color-blue-80);
+  --color-primary-bg: var(--color-blue-10);
+  --color-positive: var(--color-green-80);
+  --color-positive-bg: var(--color-green-10);
+  --color-negative: var(--color-red-80);
+  --color-negative-bg: var(--color-red-10);
+
+  --shadow-emphasize: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  /* --- 폰트 (시안의 오버라이드 그대로) --- */
+  --font-family-base: "Roboto", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-family-display: "Roboto", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-family-mono: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo",
+    "Noto Sans KR", sans-serif;
+}
+
+/* --- 다크 테마 --- */
+[data-theme="dark"] {
+  --color-fg-strong: #ffffff;
+  --color-fg-normal: #dbdcdf;
+  --color-fg-neutral: #aeb0b6;
+  --color-fg-alternate: #989ba2;
+  --color-fg-assistive: #70737c;
+  --color-fg-disable: #46474b;
+
+  --color-bg-base: #171719;
+  --color-bg-elevated: #25272a;
+  --color-bg-alternate: #1b1c1e;
+  --color-bg-neutral: #37383c;
+  --color-bg-inverse: #ffffff;
+
+  --color-line-normal: #37383c;
+  --color-line-neutral: #25272a;
+  --color-line-strong: #46474b;
+
+  --color-primary-bg: rgba(0, 102, 255, 0.16);
+  --color-positive-bg: rgba(0, 191, 64, 0.16);
+  --color-negative-bg: rgba(255, 66, 66, 0.18);
+}
+
+/* --- 기본 --- */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  font-family: var(--font-family-base);
+  color: var(--color-fg-strong);
+  background: var(--color-bg-base);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+button {
+  font-family: inherit;
+}
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+h3 {
+  font: 600 22px/30px var(--font-family-base);
+  letter-spacing: -0.0194em;
+}
+
+/* --- 타이포 클래스 (시안에서 사용된 것만 이식) --- */
+.t-heading-2 { font: 600 20px/28px var(--font-family-base); letter-spacing: -0.012em; }
+.t-headline-2 { font: 600 17px/24px var(--font-family-base); letter-spacing: 0; }
+.t-body-1-r { font: 400 16px/26px var(--font-family-base); letter-spacing: 0.0057em; }
+.t-body-2-r { font: 400 15px/24px var(--font-family-base); letter-spacing: 0.0096em; }
+.t-label-1 { font: 600 14px/20px var(--font-family-base); letter-spacing: 0.0145em; }
+.t-label-2 { font: 600 13px/18px var(--font-family-base); letter-spacing: 0.0194em; }
+.t-caption-1 { font: 500 12px/16px var(--font-family-base); letter-spacing: 0.0252em; }
+.t-caption-2 { font: 500 11px/14px var(--font-family-base); letter-spacing: 0.0311em; }
+
+/* --- 호버 상태 (시안의 style-hover 이식) --- */
+.hover-row { transition: background 150ms; }
+.hover-row:hover { background: var(--color-bg-alternate); }
+.hover-card { transition: box-shadow 150ms; }
+.hover-card:hover { box-shadow: var(--shadow-emphasize); }
+.hover-bg:hover { background: var(--color-bg-neutral); }
+.hover-fg:hover { color: var(--color-fg-strong); }
+.hover-primary-fg:hover { color: var(--color-primary); }
+.btn-primary { background: var(--color-primary); transition: background 150ms; }
+.btn-primary:hover { background: var(--color-primary-hover); }
+.hover-white:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* --- 반응형: 데스크톱 / 모바일 레이아웃 전환 (768px 기준) --- */
+.only-desktop { display: block; }
+.only-mobile { display: none; }
+@media (max-width: 767px) {
+  .only-desktop { display: none; }
+  .only-mobile { display: block; }
+}
+
+/* 모바일 가로 스크롤 줄에서 스크롤바 숨김 */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
