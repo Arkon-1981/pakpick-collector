@@ -1,0 +1,13 @@
+# 비밀키가 들어있는 환경설정 파일 — 절대 커밋 금지
+.env
+
+# 파이썬
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 로컬 테스트 산출물
+*.html
+*.json.gz
+data/
