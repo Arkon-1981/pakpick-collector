@@ -29,19 +29,27 @@ from common.logging_util import get_logger
 logger = get_logger(__name__)
 
 
-def _best_image(images: list) -> str | None:
-    """대표 이미지 선택: BoxArt > Poster > 첫 번째"""
-    if not images:
+_XBOX_IMG_PRIORITY = {"BoxArt": 0, "Poster": 1, "SuperHeroArt": 2, "BrandedKeyArt": 3, "Screenshot": 4}
+
+
+def _norm_uri(uri: str | None) -> str | None:
+    if not uri:
         return None
-    priority = {"BoxArt": 0, "Poster": 1, "SuperHeroArt": 2, "BrandedKeyArt": 3}
-    best = sorted(
-        images,
-        key=lambda im: priority.get(im.get("ImagePurpose", ""), 99),
-    )[0]
-    uri = best.get("Uri") or ""
-    if uri.startswith("//"):
-        uri = "https:" + uri
-    return uri or None
+    return ("https:" + uri) if uri.startswith("//") else uri
+
+
+def _images(images: list) -> tuple[str | None, list[str]]:
+    """(대표 이미지, 갤러리 최대 5장)을 뽑는다."""
+    if not images:
+        return None, []
+    ordered = sorted(images, key=lambda im: _XBOX_IMG_PRIORITY.get(im.get("ImagePurpose", ""), 99))
+    gallery: list[str] = []
+    for im in ordered:
+        uri = _norm_uri(im.get("Uri"))
+        if uri and uri not in gallery:
+            gallery.append(uri)
+    gallery = gallery[:5]
+    return (gallery[0] if gallery else None), gallery
 
 
 def _extract_price(product: dict) -> dict:
@@ -96,7 +104,7 @@ def parse_catalog_products(data: dict) -> list[ParsedItem]:
 
         loc = (product.get("LocalizedProperties") or [{}])[0]
         title = loc.get("ProductTitle")
-        image_url = _best_image(loc.get("Images") or [])
+        image_url, gallery = _images(loc.get("Images") or [])
 
         market = (product.get("MarketProperties") or [{}])[0]
         release_date = market.get("OriginalReleaseDate")
@@ -122,6 +130,7 @@ def parse_catalog_products(data: dict) -> list[ParsedItem]:
             "developer": loc.get("DeveloperName"),
             "publisher": loc.get("PublisherName"),
             "short_description": loc.get("ShortDescription"),
+            "gallery": gallery,
         }
 
         items.append(

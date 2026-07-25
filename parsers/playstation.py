@@ -69,6 +69,39 @@ def _parse_epoch_ms(value) -> str | None:
         return None
 
 
+# 캐러셀 갤러리에 넣을 이미지 역할 우선순위 (LOGO=투명 로고는 제외)
+_PS_ROLE_PRIORITY = {
+    "GAMEHUB_COVER_ART": 0, "MASTER": 1, "EDITION_KEY_ART": 2,
+    "FOUR_BY_THREE_BANNER": 3, "BACKGROUND": 4, "SCREENSHOT": 5,
+}
+
+
+def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
+    """media 배열에서 (대표 이미지, 갤러리 최대 5장)을 뽑는다."""
+    if not isinstance(media, list):
+        return None, []
+    imgs: list[tuple[int, str]] = []
+    for m in media:
+        if isinstance(m, dict) and "__ref" in m:
+            m = apollo.get(m["__ref"], {})
+        if not isinstance(m, dict):
+            continue
+        url = m.get("url")
+        if not url or (m.get("type") not in (None, "IMAGE")):
+            continue
+        role = m.get("role", "")
+        if role == "LOGO":  # 배경 투명 로고는 캐러셀에 부적합
+            continue
+        imgs.append((_PS_ROLE_PRIORITY.get(role, 99), url))
+    imgs.sort(key=lambda x: x[0])
+    gallery: list[str] = []
+    for _, url in imgs:
+        if url not in gallery:
+            gallery.append(url)
+    gallery = gallery[:5]
+    return (gallery[0] if gallery else None), gallery
+
+
 def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
     """apolloState의 Product 노드 1개를 ParsedItem으로 변환한다."""
     product_id = node.get("id") or key.split(":", 1)[-1]
@@ -97,17 +130,8 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
         base is not None and discounted is not None and discounted < base
     )
 
-    # 이미지: media 배열에서 대표 이미지 추출
-    image_url = None
-    media = node.get("media")
-    if isinstance(media, list):
-        for m_item in media:
-            if isinstance(m_item, dict) and "__ref" in m_item:
-                m_item = apollo.get(m_item["__ref"], {})
-            if isinstance(m_item, dict) and m_item.get("url"):
-                image_url = m_item["url"]
-                if m_item.get("role") in ("MASTER", "GAMEHUB_COVER_ART"):
-                    break
+    # 이미지: media 배열에서 대표 이미지 + 갤러리(캐러셀용) 추출
+    image_url, gallery = _images_from_media(node.get("media"), apollo)
 
     store_url = f"https://store.playstation.com/ko-kr/product/{product_id}"
 
@@ -116,6 +140,7 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
         "apollo_key": key,
         "node": node,
         "price_raw": price_node,
+        "gallery": gallery,
     }
 
     return ParsedItem(
