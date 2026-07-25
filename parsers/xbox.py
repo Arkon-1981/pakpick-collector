@@ -47,8 +47,11 @@ def _best_image(images: list) -> str | None:
 def _extract_price(product: dict) -> dict:
     """SKU/Availability 목록에서 실제 판매 가격을 찾는다.
 
-    조건: 구매 가능한(Availability에 Price가 있는) 항목 중
-    ListPrice가 가장 낮은 것을 현재가로 본다.
+    ⚠️ 한 상품에는 '구매' 항목 외에도 라이선스/데모/Game Pass 소유 확인용
+    Availability가 섞여 있고, 이들은 ListPrice=0 으로 온다.
+    가장 낮은 가격을 그냥 고르면 0원 항목을 집어 '할인 아님'으로 오판한다.
+    따라서 Actions 에 'Purchase' 가 있는 '실제 구매 가능' 항목만 본다.
+    그중 ListPrice가 가장 낮은 것(기본 에디션)을 현재가로 삼는다.
     """
     best = {
         "msrp": None, "list_price": None, "currency": "KRW",
@@ -58,6 +61,9 @@ def _extract_price(product: dict) -> dict:
     for sku_av in product.get("DisplaySkuAvailabilities") or []:
         sku = sku_av.get("Sku") or {}
         for av in sku_av.get("Availabilities") or []:
+            # 구매 가능한 항목만 (라이선스/데모 등 0원 항목 제외)
+            if "Purchase" not in (av.get("Actions") or []):
+                continue
             price = ((av.get("OrderManagementData") or {}).get("Price")) or {}
             list_price = price.get("ListPrice")
             msrp = price.get("MSRP")
