@@ -3,10 +3,11 @@
 Xbox는 세 플랫폼 중 유일하게 2단계 방식이 필요하다:
 
   1단계 — 할인 상품 ID(BigId) 목록 얻기
-    한 가지 경로가 막힐 수 있어서 여러 경로를 순서대로 시도한다:
-      경로A: reco-public 추천 목록 API (구형, 막혔을 수 있음)
-      경로B: storeedgefd 컬렉션 API (윈도우 스토어 앱이 쓰는 경로)
-      경로C: xbox.com / microsoft.com 할인 페이지 HTML에서 상품 ID 추출
+    여러 경로의 결과를 '모두 합쳐서' 최대한 많이 확보한다:
+      경로A: emerald(xbox.com 프론트도어) API — MS-CV 헤더 필요, 세일 채널 목록
+      경로B: xbox.com / microsoft.com 세일 페이지 HTML에서 productId 추출
+    (구형 reco-public / storeedgefd API는 각각 GH러너 IP 차단 / 빈 응답으로
+     현재 사용 불가 → _ids_from_list_api 는 남겨두되 호출하지 않는다.)
 
   2단계 — 상품 상세 조회 (인증 불필요 공개 JSON API)
       https://displaycatalog.mp.microsoft.com/v7.0/products
@@ -37,8 +38,18 @@ STOREEDGE_URL = (
     "?Market=KR&Language=ko&ItemTypes=Game&deviceFamily=Windows.Xbox"
     "&count={count}&skipItems={skip}"
 )
+# emerald: xbox.com 웹 스토어가 실제로 쓰는 프론트도어 API.
+# MS-CV 헤더가 필수(값은 형식만 맞으면 됨). 세일 채널별 상품 목록을 JSON으로 준다.
+MS_CV = "aaaaaaaaaaaaaaaa.0"
+EMERALD_URL = (
+    "https://emerald.xboxservices.com/xboxcomfd/browse"
+    "?locale=ko-kr&channelKeyToBeUsedInResponse={channel}"
+)
+EMERALD_CHANNELS = ["game-deals", "ultimate-game-sale"]
+
 DEALS_PAGES = [
     "https://www.xbox.com/ko-KR/games/browse/game-deals",
+    "https://www.xbox.com/ko-KR/games/browse/ultimate-game-sale",
     "https://www.microsoft.com/ko-kr/store/deals/games",
 ]
 
@@ -52,8 +63,10 @@ PAGE_SIZE = 200        # 목록 API 한 번에 가져올 개수
 CATALOG_BATCH = 20     # 상세 API 한 번에 조회할 상품 수
 MAX_TOTAL = 5000       # 안전장치
 
-# BigId 형식: 9로 시작하는 12자리 대문자 영문+숫자
+# BigId 형식: 12자리 대문자 영문+숫자 (9뿐 아니라 B/C 등으로도 시작함)
 BIG_ID_RE = re.compile(r"\b(9[A-Z0-9]{11})\b")
+# 페이지 내장 JSON의 productId 를 정확히 집는다 (접두어 무관)
+PRODUCT_ID_RE = re.compile(r'"productId"\s*:\s*"([0-9A-Z]{12})"')
 
 
 class XboxCollector(BaseCollector):
@@ -78,23 +91,67 @@ class XboxCollector(BaseCollector):
     # =================================================================
 
     def _fetch_deal_ids(self) -> list[str]:
-        sources = [
-            ("reco-public API", self._ids_from_list_api, RECO_URL),
-            ("storeedgefd API", self._ids_from_list_api, STOREEDGE_URL),
-            ("할인 페이지 HTML", self._ids_from_deals_pages, None),
-        ]
-        for name, func, arg in sources:
-            try:
-                ids = func(arg) if arg else func()
-            except Exception as exc:
-                logger.warning("[xbox] %s 경로 실패: %s — 다음 경로 시도", name, exc)
-                self.record_parse_error(None, f"{name} 경로 실패: {exc}")
+        """여러 경로의 상품 ID를 '모두 합쳐서' 최대한 많이 확보한다.
+
+        과거엔 첫 성공 경로만 쓰고 멈췄지만, reco/storeedge API가 막히면서
+        HTML 폴백 한 곳(≈54개)에만 의존해 커버리지가 급감했다.
+        이제 emerald API + 여러 세일 페이지를 병합해 중복 제거 후 반환한다.
+        """
+        ids: list[str] = []
+
+        # 1. emerald 웹 스토어 API (xbox.com이 실제로 쓰는 경로, 데이터 정확)
+        try:
+            ids.extend(self._ids_from_emerald())
+        except Exception as exc:
+            logger.warning("[xbox] emerald 경로 실패: %s", exc)
+            self.record_parse_error(None, f"emerald 경로 실패: {exc}")
+
+        # 2. 세일 페이지 HTML(여러 채널)에서 상품 ID 추출 (보강)
+        try:
+            ids.extend(self._ids_from_deals_pages())
+        except Exception as exc:
+            logger.warning("[xbox] 할인 페이지 경로 실패: %s", exc)
+            self.record_parse_error(None, f"할인 페이지 경로 실패: {exc}")
+
+        unique = list(dict.fromkeys(ids))
+        logger.info("[xbox] 확보한 고유 상품 ID %d개", len(unique))
+        return unique
+
+    def _ids_from_emerald(self) -> list[str]:
+        """emerald(xbox.com 프론트도어) API에서 세일 채널 상품 ID를 수집."""
+        ids: list[str] = []
+        for channel in EMERALD_CHANNELS:
+            url = EMERALD_URL.format(channel=channel)
+            result = fetch(url, extra_headers={"Accept": "application/json", "MS-CV": MS_CV})
+            if result.status_code != 200:
+                logger.warning("[xbox] emerald(%s) 상태코드 %s", channel, result.status_code)
                 continue
-            if ids:
-                logger.info("[xbox] '%s' 경로에서 상품 ID %d개 확보", name, len(ids))
-                return ids
-            logger.warning("[xbox] %s 경로에서 상품 ID 0개 — 다음 경로 시도", name)
-        return []
+
+            self.save_raw(
+                result, document_type="list",
+                filename=f"emerald-{channel}.json",
+                content_type="application/json",
+            )
+            self.pages_found += 1
+
+            try:
+                data = json.loads(result.text)
+            except json.JSONDecodeError:
+                self.record_parse_error(url, "emerald JSON 파싱 실패")
+                continue
+
+            for summary in data.get("productSummaries") or []:
+                pid = summary.get("productId")
+                if pid:
+                    ids.append(pid)
+            for channel_obj in (data.get("channels") or {}).values():
+                for product in channel_obj.get("products") or []:
+                    pid = product.get("productId")
+                    if pid:
+                        ids.append(pid)
+
+            logger.info("[xbox] emerald(%s)에서 상품 ID 수집 (누적 %d)", channel, len(ids))
+        return ids
 
     def _ids_from_list_api(self, url_template: str) -> list[str]:
         """reco-public / storeedgefd 형식의 목록 API에서 ID 수집."""
@@ -156,7 +213,10 @@ class XboxCollector(BaseCollector):
             )
             self.pages_found += 1
 
-            found = BIG_ID_RE.findall(result.text.upper())
+            # 내장 JSON의 productId 를 우선 추출(접두어 무관), 없으면 BigId 패턴 폴백
+            found = PRODUCT_ID_RE.findall(result.text)
+            if not found:
+                found = BIG_ID_RE.findall(result.text.upper())
             ids.extend(found)
             logger.info("[xbox] %s 에서 ID 후보 %d개", url, len(found))
 
