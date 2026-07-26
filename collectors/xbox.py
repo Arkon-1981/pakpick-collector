@@ -21,6 +21,7 @@ import json
 import re
 
 from collectors.base import BaseCollector
+from common import config
 from common.http_client import fetch
 from common.logging_util import get_logger
 from parsers.xbox import parse_catalog_products
@@ -30,12 +31,14 @@ logger = get_logger(__name__)
 # ----- 1단계 경로들 -----
 # emerald: xbox.com 웹 스토어가 실제로 쓰는 프론트도어 API.
 # MS-CV 헤더가 필수(값은 형식만 맞으면 됨). 세일 채널별 상품 목록을 JSON으로 준다.
+# PAGENUMBER 로 페이지네이션(페이지당 ~46개). 안 넘기면 첫 페이지 ~46개만 받는다.
 MS_CV = "aaaaaaaaaaaaaaaa.0"
 EMERALD_URL = (
     "https://emerald.xboxservices.com/xboxcomfd/browse"
-    "?locale=ko-kr&channelKeyToBeUsedInResponse={channel}"
+    "?locale=ko-kr&channelKeyToBeUsedInResponse={channel}&PAGENUMBER={page}"
 )
 EMERALD_CHANNELS = ["game-deals", "ultimate-game-sale"]
+EMERALD_MAX_PAGES = 60  # 무한 루프 방지 (페이지당 ~46개 → 최대 ~2,700개)
 
 DEALS_PAGES = [
     "https://www.xbox.com/ko-KR/games/browse/game-deals",
@@ -94,6 +97,11 @@ class XboxCollector(BaseCollector):
             logger.warning("[xbox] emerald 경로 실패: %s", exc)
             self.record_parse_error(None, f"emerald 경로 실패: {exc}")
 
+        # 이미 목표 수량을 채웠으면 HTML 폴백은 생략 (dedup 후 최종 상한 적용)
+        unique_so_far = list(dict.fromkeys(ids))
+        if len(unique_so_far) >= config.XBOX_MAX_ITEMS:
+            return unique_so_far[: config.XBOX_MAX_ITEMS]
+
         # 2. 세일 페이지 HTML(여러 채널)에서 상품 ID 추출 (보강)
         try:
             ids.extend(self._ids_from_deals_pages())
@@ -101,44 +109,63 @@ class XboxCollector(BaseCollector):
             logger.warning("[xbox] 할인 페이지 경로 실패: %s", exc)
             self.record_parse_error(None, f"할인 페이지 경로 실패: {exc}")
 
-        unique = list(dict.fromkeys(ids))
+        unique = list(dict.fromkeys(ids))[: config.XBOX_MAX_ITEMS]
         logger.info("[xbox] 확보한 고유 상품 ID %d개", len(unique))
         return unique
 
     def _ids_from_emerald(self) -> list[str]:
-        """emerald(xbox.com 프론트도어) API에서 세일 채널 상품 ID를 수집."""
+        """emerald(xbox.com 프론트도어) API에서 세일 채널 상품 ID를 페이지네이션으로 수집.
+
+        PAGENUMBER 를 1부터 넘기며 목표 수량(XBOX_MAX_ITEMS)까지 모은다.
+        (채널들이 사실상 같은 목록을 주므로, 한 채널로 목표를 채우면 다음 채널은 건너뛴다.)
+        """
+        seen: set[str] = set()
         ids: list[str] = []
         for channel in EMERALD_CHANNELS:
-            url = EMERALD_URL.format(channel=channel)
-            result = fetch(url, extra_headers={"Accept": "application/json", "MS-CV": MS_CV})
-            if result.status_code != 200:
-                logger.warning("[xbox] emerald(%s) 상태코드 %s", channel, result.status_code)
-                continue
+            if len(seen) >= config.XBOX_MAX_ITEMS:
+                break
+            for page in range(1, EMERALD_MAX_PAGES + 1):
+                if len(seen) >= config.XBOX_MAX_ITEMS:
+                    break
+                url = EMERALD_URL.format(channel=channel, page=page)
+                result = fetch(url, extra_headers={"Accept": "application/json", "MS-CV": MS_CV})
+                if result.status_code != 200:
+                    logger.warning("[xbox] emerald(%s p%d) 상태코드 %s", channel, page, result.status_code)
+                    break
 
-            self.save_raw(
-                result, document_type="list",
-                filename=f"emerald-{channel}.json",
-                content_type="application/json",
-            )
-            self.pages_found += 1
+                self.save_raw(
+                    result, document_type="list",
+                    filename=f"emerald-{channel}-p{page}.json",
+                    content_type="application/json",
+                )
+                self.pages_found += 1
 
-            try:
-                data = json.loads(result.text)
-            except json.JSONDecodeError:
-                self.record_parse_error(url, "emerald JSON 파싱 실패")
-                continue
+                try:
+                    data = json.loads(result.text)
+                except json.JSONDecodeError:
+                    self.record_parse_error(url, "emerald JSON 파싱 실패")
+                    break
 
-            for summary in data.get("productSummaries") or []:
-                pid = summary.get("productId")
-                if pid:
-                    ids.append(pid)
-            for channel_obj in (data.get("channels") or {}).values():
-                for product in channel_obj.get("products") or []:
-                    pid = product.get("productId")
+                page_ids: list[str] = []
+                for summary in data.get("productSummaries") or []:
+                    pid = summary.get("productId")
                     if pid:
-                        ids.append(pid)
+                        page_ids.append(pid)
+                for channel_obj in (data.get("channels") or {}).values():
+                    for product in channel_obj.get("products") or []:
+                        pid = product.get("productId")
+                        if pid:
+                            page_ids.append(pid)
 
-            logger.info("[xbox] emerald(%s)에서 상품 ID 수집 (누적 %d)", channel, len(ids))
+                # 새 ID가 없으면 마지막 페이지로 간주하고 종료
+                fresh = [p for p in page_ids if p not in seen]
+                if not fresh:
+                    break
+                for pid in fresh:
+                    seen.add(pid)
+                    ids.append(pid)
+
+            logger.info("[xbox] emerald(%s) 누적 상품 ID %d개", channel, len(ids))
         return ids
 
     def _ids_from_deals_pages(self) -> list[str]:
