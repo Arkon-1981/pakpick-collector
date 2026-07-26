@@ -109,6 +109,7 @@ def parse_list_page(html: str) -> list[ParsedItem]:
             "title": title,
             "store_url": href,
             "image_url": image_url,
+            "gallery": [image_url] if image_url else [],
             "release_text": release_text,
             "tile_text": tile.get_text(" ", strip=True)[:1000],
             "price_raw": {
