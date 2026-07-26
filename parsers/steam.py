@@ -122,3 +122,23 @@ def parse_search_results_html(html: str) -> list[ParsedItem]:
 def count_rows(html: str) -> int:
     """페이지의 행 개수 (번들 포함). 페이지네이션 start 증가에 사용."""
     return html.count('class="search_result_row')
+
+
+def parse_screenshots(data: dict, appid: str, limit: int = 5) -> list[str]:
+    """appdetails(filters=screenshots) 응답에서 스크린샷 원본 URL을 뽑는다.
+
+    응답 구조: { "<appid>": { "success": true,
+                 "data": { "screenshots": [ {"path_full": "...ss_....1920x1080.jpg?t=..."} ] } } }
+    """
+    app = data.get(str(appid)) or {}
+    if not app.get("success"):
+        return []
+    shots = (app.get("data") or {}).get("screenshots") or []
+    urls: list[str] = []
+    for s in shots:
+        u = s.get("path_full")
+        if u:
+            urls.append(u.split("?")[0])  # 캐시버스터(?t=) 제거해 URL 안정화
+        if len(urls) >= limit:
+            break
+    return urls

@@ -214,6 +214,29 @@ def record_raw_document(
 # 상품 (store_items / store_item_versions)
 # ---------------------------------------------------------------
 
+def get_item_gallery(platform: str, store_region: str, store_product_id: str) -> list | None:
+    """이미 저장된 상품의 갤러리(current_data->gallery)를 돌려준다. 없으면 None.
+
+    스팀 갤러리 보강 시 재사용용: 이미 스크린샷을 채운 상품은 상세 API를
+    다시 부르지 않고 기존 갤러리를 그대로 유지한다.
+    """
+    res = (
+        get_client()
+        .table("store_items")
+        .select("current_data")
+        .eq("platform", platform)
+        .eq("store_region", store_region)
+        .eq("store_product_id", store_product_id)
+        .limit(1)
+        .execute()
+    )
+    if res.data:
+        gallery = (res.data[0].get("current_data") or {}).get("gallery")
+        if isinstance(gallery, list):
+            return gallery
+    return None
+
+
 def upsert_store_item(
     *,
     platform: str,
