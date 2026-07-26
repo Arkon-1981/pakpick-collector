@@ -29,12 +29,15 @@ MAX_PAGES = 200  # 무한 루프 방지용 안전장치
 
 # 닌텐도 스토어 할인 목록의 플랫폼 필터(Amasty Shop By).
 # label_platform 옵션값: 4679 = Nintendo Switch 2, 4678 = Nintendo Switch(1)
-# 목록 타일 자체에는 세대 표시가 없어서, Switch 2만 필터링한 목록을 따로 긁어
-# 상품 ID 집합을 만든 뒤 각 상품에 세대를 태깅한다.
+# 목록 타일 자체에는 세대 표시가 없어서, 각 세대 필터 목록을 따로 긁어
+# 상품 ID 집합을 만든 뒤 각 상품에 세대를 태깅한다:
+#   SW1 필터에만 있음 → switch1 / SW2 필터에만 있음 → switch2 / 둘 다 있음 → both
 # URL 형식이 스토어 설정에 따라 다를 수 있어 후보를 순서대로 시도한다.
-SW2_FILTER_URLS = [
-    "https://store.nintendo.co.kr/digital/sale?label_platform=4679&p={page}",
-    "https://store.nintendo.co.kr/digital/sale?amshopby%5Blabel_platform%5D%5B%5D=4679&p={page}",
+SW1_LABEL = "4678"
+SW2_LABEL = "4679"
+FILTER_URL_TEMPLATES = [
+    "https://store.nintendo.co.kr/digital/sale?label_platform={opt}&p={page}",
+    "https://store.nintendo.co.kr/digital/sale?amshopby%5Blabel_platform%5D%5B%5D={opt}&p={page}",
 ]
 
 
@@ -57,8 +60,8 @@ class NintendoCollector(BaseCollector):
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
         enriched = 0  # 갤러리 보강한 상품 수 (상위 NINTENDO_GALLERY_MAX개만)
-        # Switch 2 상품 ID 집합. None = 아직 미확보, set() = 확보 실패(태깅 안 함)
-        switch2_ids: set[str] | None = None
+        # (SW1 ID집합, SW2 ID집합). None = 아직 미확보
+        gen_sets: tuple[set[str], set[str]] | None = None
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -103,11 +106,13 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지에 상품 없음 — 수집 종료", page)
                 break
 
-            # 1페이지 상품 목록이 확보되면, 그걸 기준으로 Switch 2 세대를 식별한다.
+            # 1페이지 목록이 확보되면, 그걸 기준으로 세대 필터(SW1/SW2)를 식별한다.
             # (한 번만 실행. 실패해도 나머지 수집은 그대로 진행 → 세대 태깅만 생략)
-            if switch2_ids is None:
+            if gen_sets is None:
                 page1_ids = {i.store_product_id for i in items}
-                switch2_ids = self._collect_switch2_ids(page1_ids)
+                sw2 = self._collect_filter_ids(SW2_LABEL, page1_ids)
+                sw1 = self._collect_filter_ids(SW1_LABEL, page1_ids)
+                gen_sets = (sw1, sw2)
 
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             if not new_items:
@@ -115,12 +120,19 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지는 전부 중복 — 수집 종료", page)
                 break
 
+            sw1_ids, sw2_ids = gen_sets
+            have_filter = bool(sw1_ids or sw2_ids)
             for item in new_items:
                 seen_ids.add(item.store_product_id)
-                # 세대 태깅: Switch 2 목록을 신뢰할 수 있을 때만 붙인다
-                if switch2_ids:
-                    gen = "switch2" if item.store_product_id in switch2_ids else "switch1"
-                    item.extracted_data["platform_generation"] = gen
+                # 세대 태깅: 필터가 하나라도 동작했을 때만.
+                #   둘 다 있음 → both / SW2만 → switch2 / 그 외 → switch1(기본)
+                if have_filter:
+                    pid = item.store_product_id
+                    in1 = pid in sw1_ids
+                    in2 = pid in sw2_ids
+                    item.extracted_data["platform_generation"] = (
+                        "both" if (in1 and in2) else "switch2" if in2 else "switch1"
+                    )
                 # 상위 인기작에 상세 스크린샷 갤러리 보강 (이미 있으면 재사용)
                 if enriched < config.NINTENDO_GALLERY_MAX:
                     self._ensure_gallery(item)
@@ -176,16 +188,15 @@ class NintendoCollector(BaseCollector):
     # Switch 1 / Switch 2 세대 구분
     # -----------------------------------------------------------------
 
-    def _collect_switch2_ids(self, all_page1_ids: set[str]) -> set[str]:
-        """Switch 2 전용 필터로 목록을 긁어 Switch 2 상품 ID 집합을 만든다.
+    def _collect_filter_ids(self, opt: str, all_page1_ids: set[str]) -> set[str]:
+        """특정 세대 필터(label_platform=opt)로 목록을 긁어 상품 ID 집합을 만든다.
 
-        필터가 안 먹히면(=필터 목록 1페이지가 전체 목록 1페이지와 동일하거나 비어 있음)
-        빈 집합을 돌려줘 세대 태깅을 건너뛴다. 어떤 예외가 나도 빈 집합을 돌려
-        기존 수집이 절대 깨지지 않게 한다.
+        필터가 안 먹히면(=필터 1페이지가 전체 목록 1페이지와 동일하거나 비어 있음)
+        빈 집합을 돌려준다. 어떤 예외가 나도 빈 집합을 돌려 기존 수집이 깨지지 않게 한다.
         """
         try:
-            for template in SW2_FILTER_URLS:
-                first = self._get_page(template.format(page=1))
+            for template in FILTER_URL_TEMPLATES:
+                first = self._get_page(template.format(opt=opt, page=1))
                 if first is None or first.status_code != 200:
                     continue
                 first_ids = {i.store_product_id for i in parse_list_page(first.text)}
@@ -195,20 +206,20 @@ class NintendoCollector(BaseCollector):
 
                 ids = set(first_ids)
                 for page in range(2, MAX_PAGES + 1):
-                    res = self._get_page(template.format(page=page))
+                    res = self._get_page(template.format(opt=opt, page=page))
                     if res is None or res.status_code != 200:
                         break
                     page_ids = {i.store_product_id for i in parse_list_page(res.text)}
                     if not page_ids or page_ids <= ids:
                         break  # 새 상품이 없으면 마지막 페이지
                     ids |= page_ids
-                logger.info("[nintendo] Switch 2 상품 %d개 식별 (필터: %s)", len(ids), template)
+                logger.info("[nintendo] 필터 %s 상품 %d개 식별", opt, len(ids))
                 return ids
 
-            logger.warning("[nintendo] Switch 2 필터가 동작하지 않음 — 세대 태깅 생략")
+            logger.warning("[nintendo] 필터 %s 동작하지 않음", opt)
             return set()
         except Exception:
-            logger.exception("[nintendo] Switch 2 목록 수집 실패 — 세대 태깅 생략")
+            logger.exception("[nintendo] 필터 %s 수집 실패", opt)
             return set()
 
     # -----------------------------------------------------------------
