@@ -8,7 +8,7 @@ Supabase에 이미 만들어 둔 6개 테이블에 맞춰 저장한다:
   price_snapshots      가격이 바뀔 때마다 기록
   crawl_errors         수집 중 오류
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from common.hashing import sha256_json
 from common.logging_util import get_logger
@@ -19,6 +19,65 @@ logger = get_logger(__name__)
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------
+# 전멸 방지 가드 보조
+# ---------------------------------------------------------------
+def last_good_run(platform: str) -> dict | None:
+    """직전에 '실제로 수집된' 실행(success/partial) 1건을 반환.
+
+    반환: {"products_found": int, "status": str} 또는 None.
+    이상 감지(급감) 판단의 기준선으로 사용한다.
+    """
+    res = (
+        get_client()
+        .table("crawl_runs")
+        .select("products_found,status")
+        .eq("platform", platform)
+        .in_("status", ["success", "partial"])
+        .order("started_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0] if res.data else None
+
+
+def last_finished_status(platform: str) -> str | None:
+    """직전 실행의 상태(성공/부분/실패)를 반환.
+
+    연속 고장 판단용: 직전이 이미 failed면 보호를 반복하지 않아 stale 영구화를 막는다.
+    이 함수는 현재 실행 생성(start_crawl_run) 전에 호출되므로,
+    가장 최근 실행 1건이 곧 '직전 실행'이다.
+    """
+    res = (
+        get_client()
+        .table("crawl_runs")
+        .select("status")
+        .eq("platform", platform)
+        .order("started_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0]["status"] if res.data else None
+
+
+def protect_recent_items(platform: str, hours: int) -> int:
+    """최근 `hours` 안에 보였던 상품들의 last_seen_at을 now로 갱신.
+
+    크롤러 고장(급감)으로 판단됐을 때, 웹의 신선도 필터에서 기존 상품이
+    한 사이클 더 살아남게 해 '사이트 전멸'을 막는다. 반환: 보호된 행 수.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    res = (
+        get_client()
+        .table("store_items")
+        .update({"last_seen_at": _now()})
+        .eq("platform", platform)
+        .gte("last_seen_at", cutoff)
+        .execute()
+    )
+    return len(res.data or [])
 
 
 # ---------------------------------------------------------------

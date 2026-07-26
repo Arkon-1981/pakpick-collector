@@ -153,24 +153,25 @@ class BaseCollector:
             error_message=message, error_details=details or {},
         )
 
+    # ----- 전멸 방지 가드 설정 -----
+    # 직전 성공 수집이 이만큼은 돼야 급감 비교가 의미 있음 (신생 플랫폼 오탐 방지)
+    GUARD_MIN_BASELINE = 30
+    # 직전 대비 이 비율 미만이면 '크롤러 고장'으로 간주 (사이트 구조 변경/봇 차단 등)
+    GUARD_ANOMALY_RATIO = 0.5
+    # 고장 판단 시 기존 상품을 몇 시간 창 기준으로 보호(웹 신선도 창과 맞춤)
+    GUARD_PROTECT_HOURS = 48
+
     # ----- 실행 진입점 -----
 
     def run(self) -> None:
+        # 이상 감지 기준선: 직전에 실제로 수집된 실행의 상품 수 + 직전 실행 상태
+        baseline = repository.last_good_run(self.platform)
+        prev_status = repository.last_finished_status(self.platform)
         self.run_id = repository.start_crawl_run(self.platform)
+
+        # 1) 수집 실행 (수집 자체가 예외로 실패하면 failed 처리 후 재던짐)
         try:
             self.collect()
-            status = "success" if self.errors_count == 0 else "partial"
-            repository.finish_crawl_run(
-                self.run_id,
-                status=status,
-                pages_found=self.pages_found,
-                products_found=self.products_found,
-                errors_count=self.errors_count,
-            )
-            logger.info(
-                "[%s] 수집 완료 — 페이지 %d개, 상품 %d개, 오류 %d건",
-                self.platform, self.pages_found, self.products_found, self.errors_count,
-            )
         except Exception as exc:
             logger.exception("[%s] 수집 실패", self.platform)
             repository.finish_crawl_run(
@@ -182,3 +183,48 @@ class BaseCollector:
                 error_message=str(exc)[:2000],
             )
             raise
+
+        # 2) 전멸 방지 가드: 이번 수집이 직전 대비 급감했으면 크롤러 고장으로 처리
+        base_count = (baseline or {}).get("products_found") or 0
+        if (
+            base_count >= self.GUARD_MIN_BASELINE
+            and self.products_found < base_count * self.GUARD_ANOMALY_RATIO
+        ):
+            protected = 0
+            # 직전 실행이 '실패'가 아니었을 때만 1회 보호 (연속 고장이면 자연 소멸시켜 stale 방지)
+            if prev_status != "failed":
+                try:
+                    protected = repository.protect_recent_items(
+                        self.platform, self.GUARD_PROTECT_HOURS
+                    )
+                except Exception:
+                    logger.exception("[%s] 데이터 보호 갱신 실패", self.platform)
+            msg = (
+                f"이상 감지: 이번 수집 {self.products_found}개 < 직전 {base_count}개의 "
+                f"{int(self.GUARD_ANOMALY_RATIO * 100)}% — 크롤러 고장 의심. "
+                f"기존 상품 {protected}건 보호(last_seen 갱신)."
+            )
+            logger.error("[%s] %s", self.platform, msg)
+            repository.finish_crawl_run(
+                self.run_id,
+                status="failed",
+                pages_found=self.pages_found,
+                products_found=self.products_found,
+                errors_count=self.errors_count + 1,
+                error_message=msg[:2000],
+            )
+            raise RuntimeError(msg)
+
+        # 3) 정상 종료
+        status = "success" if self.errors_count == 0 else "partial"
+        repository.finish_crawl_run(
+            self.run_id,
+            status=status,
+            pages_found=self.pages_found,
+            products_found=self.products_found,
+            errors_count=self.errors_count,
+        )
+        logger.info(
+            "[%s] 수집 완료 — 페이지 %d개, 상품 %d개, 오류 %d건",
+            self.platform, self.pages_found, self.products_found, self.errors_count,
+        )
