@@ -20,20 +20,18 @@ from common import config
 from common.http_client import FetchResult, fetch
 from common.logging_util import get_logger
 from db import repository
-from parsers.nintendo import parse_detail_gallery, parse_list_page
+from parsers.nintendo import parse_detail_gallery, parse_detail_generation, parse_list_page
 
 logger = get_logger(__name__)
 
 LIST_URL = "https://store.nintendo.co.kr/digital/sale?p={page}"
 MAX_PAGES = 200  # 무한 루프 방지용 안전장치
 
-# 닌텐도 스토어 할인 목록의 플랫폼 필터(Amasty Shop By).
-# label_platform 옵션값: 4679 = Nintendo Switch 2, 4678 = Nintendo Switch(1)
-# 목록 타일 자체에는 세대 표시가 없어서, 각 세대 필터 목록을 따로 긁어
-# 상품 ID 집합을 만든 뒤 각 상품에 세대를 태깅한다:
-#   SW1 필터에만 있음 → switch1 / SW2 필터에만 있음 → switch2 / 둘 다 있음 → both
-# URL 형식이 스토어 설정에 따라 다를 수 있어 후보를 순서대로 시도한다.
-SW1_LABEL = "4678"
+# 닌텐도 스토어 할인 목록의 Switch 2 플랫폼 필터(Amasty Shop By). label_platform=4679.
+# 목록 타일엔 세대 표시가 없어서, SW2 필터 목록으로 'SW2에 올라온 게임'을 추린 뒤
+# 그 게임들만 상세 페이지의 '대상 본체'(.label_platform)로 세대를 확정한다:
+#   SW2 목록에 없음 → switch1 / SW2 목록에 있고 상세가 1·2 모두 → both / 2만 → switch2
+# (SW1 필터 전체 크롤은 무거워서 쓰지 않는다 — SW2 후보만 상세 확인)
 SW2_LABEL = "4679"
 FILTER_URL_TEMPLATES = [
     "https://store.nintendo.co.kr/digital/sale?label_platform={opt}&p={page}",
@@ -60,8 +58,7 @@ class NintendoCollector(BaseCollector):
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
         enriched = 0  # 갤러리 보강한 상품 수 (상위 NINTENDO_GALLERY_MAX개만)
-        # (SW1 ID집합, SW2 ID집합). None = 아직 미확보
-        gen_sets: tuple[set[str], set[str]] | None = None
+        sw2_ids: set[str] | None = None  # SW2 필터 상품 ID. None = 미확보
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -106,13 +103,11 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지에 상품 없음 — 수집 종료", page)
                 break
 
-            # 1페이지 목록이 확보되면, 그걸 기준으로 세대 필터(SW1/SW2)를 식별한다.
+            # 1페이지 목록이 확보되면, SW2 필터로 'SW2 후보'를 식별한다.
             # (한 번만 실행. 실패해도 나머지 수집은 그대로 진행 → 세대 태깅만 생략)
-            if gen_sets is None:
+            if sw2_ids is None:
                 page1_ids = {i.store_product_id for i in items}
-                sw2 = self._collect_filter_ids(SW2_LABEL, page1_ids)
-                sw1 = self._collect_filter_ids(SW1_LABEL, page1_ids)
-                gen_sets = (sw1, sw2)
+                sw2_ids = self._collect_filter_ids(SW2_LABEL, page1_ids)
 
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             if not new_items:
@@ -120,22 +115,19 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지는 전부 중복 — 수집 종료", page)
                 break
 
-            sw1_ids, sw2_ids = gen_sets
-            have_filter = bool(sw1_ids or sw2_ids)
+            have_filter = bool(sw2_ids)
             for item in new_items:
-                seen_ids.add(item.store_product_id)
-                # 세대 태깅: 필터가 하나라도 동작했을 때만.
-                #   둘 다 있음 → both / SW2만 → switch2 / 그 외 → switch1(기본)
-                if have_filter:
-                    pid = item.store_product_id
-                    in1 = pid in sw1_ids
-                    in2 = pid in sw2_ids
-                    item.extracted_data["platform_generation"] = (
-                        "both" if (in1 and in2) else "switch2" if in2 else "switch1"
-                    )
-                # 상위 인기작에 상세 스크린샷 갤러리 보강 (이미 있으면 재사용)
-                if enriched < config.NINTENDO_GALLERY_MAX:
-                    self._ensure_gallery(item)
+                pid = item.store_product_id
+                seen_ids.add(pid)
+                in_sw2 = pid in sw2_ids
+                # SW2 후보가 아니면 그냥 switch1 (필터가 동작한 경우만 태깅)
+                if have_filter and not in_sw2:
+                    item.extracted_data["platform_generation"] = "switch1"
+                want_gallery = enriched < config.NINTENDO_GALLERY_MAX
+                # SW2 후보(세대 확정 필요) 또는 갤러리 대상이면 상세를 본다
+                if in_sw2 or want_gallery:
+                    self._enrich_detail(item, in_sw2=in_sw2, want_gallery=want_gallery)
+                if want_gallery:
                     enriched += 1
                 self.save_item(item, raw_doc_id)
 
@@ -145,44 +137,57 @@ class NintendoCollector(BaseCollector):
     # 상세 스크린샷 갤러리 보강
     # -----------------------------------------------------------------
 
-    def _ensure_gallery(self, item) -> None:
-        """상품 상세 페이지에서 스크린샷 갤러리를 채운다 (캐러셀용).
+    def _enrich_detail(self, item, in_sw2: bool, want_gallery: bool) -> None:
+        """상세 페이지 1회 로드로 세대(대상 본체)와 갤러리(스크린샷)를 함께 채운다.
 
-        이미 갤러리(2장 이상)가 저장된 상품은 상세 페이지를 다시 열지 않고
-        기존 갤러리를 그대로 재사용한다 → 신규 상품에만 비용이 든다.
-        실패해도 기존 썸네일 1장은 그대로 남아 수집이 깨지지 않는다.
+        - in_sw2: SW2 후보 → 상세의 '대상 본체'로 both/switch2 확정 (매 실행 재확인)
+        - want_gallery: 갤러리 보강 대상 → 이미 갤러리(2장+) 있으면 상세 재로드 없이 재사용
+        - 상세가 필요 없으면(둘 다 아님) 요청하지 않는다. 실패해도 수집은 안 깨진다.
         """
-        try:
-            existing = repository.get_item_gallery(
-                "nintendo", config.STORE_REGION, item.store_product_id
-            )
-        except Exception:
-            existing = None
-        if existing and len(existing) > 1:
-            item.extracted_data["gallery"] = existing
-            return
+        pid = item.store_product_id
 
-        url = item.store_url
-        if not url:
-            return
-        try:
-            # 서버 응답 HTML을 받아야 갤러리 스크립트(x-magento-init)가 들어 있다
-            result = self._get_page(url, raw_response=True)
-        except Exception:
-            logger.exception("[nintendo] 상세 갤러리 로드 실패: %s", url)
-            return
-        if result is None or result.status_code != 200:
-            return
+        # 갤러리 재사용 가능 여부 확인 (있으면 상세 재로드 없이 씀)
+        reusable_gallery = None
+        if want_gallery:
+            try:
+                g = repository.get_item_gallery("nintendo", config.STORE_REGION, pid)
+            except Exception:
+                g = None
+            if g and len(g) > 1:
+                reusable_gallery = g
 
-        self.save_raw(
-            result, document_type="detail",
-            filename=f"detail-{item.store_product_id}.html",
-            store_product_id=item.store_product_id,
-            content_type="text/html",
-        )
-        shots = parse_detail_gallery(result.text)
-        if shots:
-            item.extracted_data["gallery"] = shots  # [대표(isMain), 스크린샷...]
+        # 세대 확정은 상세 HTML이 필요(SW2 후보). 갤러리는 재사용 불가할 때만 상세 필요.
+        need_detail = in_sw2 or (want_gallery and reusable_gallery is None)
+        html = None
+        if need_detail and item.store_url:
+            try:
+                # 서버 응답 HTML(렌더 전)이어야 갤러리 스크립트·대상 본체가 온전히 들어 있다
+                result = self._get_page(item.store_url, raw_response=True)
+            except Exception:
+                logger.exception("[nintendo] 상세 로드 실패: %s", item.store_url)
+                result = None
+            if result is not None and result.status_code == 200:
+                self.save_raw(
+                    result, document_type="detail",
+                    filename=f"detail-{pid}.html",
+                    store_product_id=pid,
+                    content_type="text/html",
+                )
+                html = result.text
+
+        # 세대: SW2 후보는 상세로 both/switch2 판별 (판별 실패 시 최소 switch2)
+        if in_sw2:
+            gen = parse_detail_generation(html) if html else None
+            item.extracted_data["platform_generation"] = gen or "switch2"
+
+        # 갤러리
+        if want_gallery:
+            if reusable_gallery is not None:
+                item.extracted_data["gallery"] = reusable_gallery
+            elif html:
+                shots = parse_detail_gallery(html)
+                if shots:
+                    item.extracted_data["gallery"] = shots  # [대표, 스크린샷...]
 
     # -----------------------------------------------------------------
     # Switch 1 / Switch 2 세대 구분
