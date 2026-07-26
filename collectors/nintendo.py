@@ -156,36 +156,34 @@ class NintendoCollector(BaseCollector):
             if g and len(g) > 1:
                 reusable_gallery = g
 
-        # 세대 확정은 상세 HTML이 필요(SW2 후보). 갤러리는 재사용 불가할 때만 상세 필요.
+        # 상세가 필요한 경우: 세대 확정(SW2 후보) 또는 갤러리 신규 필요.
+        # 세대는 렌더링 DOM(.label_platform), 갤러리는 서버 HTML(x-magento-init)에 있어
+        # 한 번의 로드로 둘 다 받는다.
         need_detail = in_sw2 or (want_gallery and reusable_gallery is None)
-        html = None
+        server_html = rendered_html = None
         if need_detail and item.store_url:
-            try:
-                # 서버 응답 HTML(렌더 전)이어야 갤러리 스크립트·대상 본체가 온전히 들어 있다
-                result = self._get_page(item.store_url, raw_response=True)
-            except Exception:
-                logger.exception("[nintendo] 상세 로드 실패: %s", item.store_url)
-                result = None
-            if result is not None and result.status_code == 200:
+            server_html, rendered_html = self._fetch_detail_pair(item.store_url)
+            if server_html:
+                # 원본은 서버 HTML로 저장 (갤러리 재처리용)
                 self.save_raw(
-                    result, document_type="detail",
+                    FetchResult(item.store_url, 200, server_html.encode("utf-8"), {"x-fetched-via": "playwright-raw"}),
+                    document_type="detail",
                     filename=f"detail-{pid}.html",
                     store_product_id=pid,
                     content_type="text/html",
                 )
-                html = result.text
 
-        # 세대: SW2 후보는 상세로 both/switch2 판별 (판별 실패 시 최소 switch2)
+        # 세대: SW2 후보는 렌더링 DOM의 '대상 본체'로 both/switch2 판별 (실패 시 최소 switch2)
         if in_sw2:
-            gen = parse_detail_generation(html) if html else None
+            gen = parse_detail_generation(rendered_html) if rendered_html else None
             item.extracted_data["platform_generation"] = gen or "switch2"
 
-        # 갤러리
+        # 갤러리: 서버 HTML에서 추출 (재사용 가능하면 그대로)
         if want_gallery:
             if reusable_gallery is not None:
                 item.extracted_data["gallery"] = reusable_gallery
-            elif html:
-                shots = parse_detail_gallery(html)
+            elif server_html:
+                shots = parse_detail_gallery(server_html)
                 if shots:
                     item.extracted_data["gallery"] = shots  # [대표, 스크린샷...]
 
@@ -252,15 +250,32 @@ class NintendoCollector(BaseCollector):
 
         return self._fetch_with_browser(url, raw_response=raw_response)
 
+    def _ensure_page(self):
+        """Playwright 페이지를 준비한다 (이미지/동영상/폰트 차단, 1회 초기화)."""
+        if self._page is None:
+            from playwright.sync_api import sync_playwright
+
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch(headless=True)
+            context = self._browser.new_context(
+                locale="ko-KR",
+                user_agent=config.USER_AGENT,
+                viewport={"width": 1280, "height": 900},
+            )
+            context.route(
+                "**/*",
+                lambda route: route.abort()
+                if route.request.resource_type in ("image", "media", "font")
+                else route.continue_(),
+            )
+            self._page = context.new_page()
+        return self._page
+
     def _fetch_with_browser(self, url: str, raw_response: bool = False) -> FetchResult | None:
         """Playwright로 실제 크롬을 띄워 페이지를 읽는다 (봇 차단 우회용).
 
-        raw_response=True 면 렌더링된 DOM(page.content()) 대신 **서버 응답 본문**을
-        돌려준다. 상세 갤러리 데이터(x-magento-init)는 서버 HTML에만 있고,
-        렌더링 DOM에는 requireJS가 제거해 없기 때문이다.
-
-        안전장치: robots.txt 준수 + 사람 같은 간격 유지 +
-        이미지/동영상/폰트는 내려받지 않아 상대 서버 부담 최소화.
+        raw_response=True 면 렌더링된 DOM 대신 서버 응답 본문을 돌려준다.
+        안전장치: robots.txt 준수 + 사람 같은 간격 유지 + 이미지/동영상/폰트 미다운로드.
         """
         from common import robots
         from common.http_client import polite_wait
@@ -270,51 +285,61 @@ class NintendoCollector(BaseCollector):
             return None
 
         try:
-            if self._page is None:
-                from playwright.sync_api import sync_playwright
-
-                self._pw = sync_playwright().start()
-                self._browser = self._pw.chromium.launch(headless=True)
-                context = self._browser.new_context(
-                    locale="ko-KR",
-                    user_agent=config.USER_AGENT,
-                    viewport={"width": 1280, "height": 900},
-                )
-                # 이미지·동영상·폰트 요청 차단 — 필요한 HTML만 받는다
-                context.route(
-                    "**/*",
-                    lambda route: route.abort()
-                    if route.request.resource_type in ("image", "media", "font")
-                    else route.continue_(),
-                )
-                self._page = context.new_page()
-
+            page = self._ensure_page()
             polite_wait()  # 사람 같은 간격 유지 (6~12초)
-            response = self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=60_000)
 
-            # 상세 갤러리용: 서버 응답 본문(렌더링 전 HTML)을 그대로 사용
             if raw_response:
                 status = response.status if response else 200
                 try:
-                    body = response.text() if response else self._page.content()
+                    body = response.text() if response else page.content()
                 except Exception:
-                    body = self._page.content()
+                    body = page.content()
                 return FetchResult(url, status, body.encode("utf-8"), {"x-fetched-via": "playwright-raw"})
 
             # 목록용: 상품 타일이 그려질 때까지 최대 20초 대기 후 렌더링 DOM 사용
             try:
-                self._page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
+                page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
             except Exception:
                 logger.warning("[nintendo] 브라우저에서도 상품 타일이 안 보임: %s", url)
 
-            html = self._page.content()
-            return FetchResult(
-                url, 200, html.encode("utf-8"), {"x-fetched-via": "playwright"}
-            )
+            html = page.content()
+            return FetchResult(url, 200, html.encode("utf-8"), {"x-fetched-via": "playwright"})
         except Exception as exc:
             logger.exception("[nintendo] 브라우저 수집 실패: %s", url)
             self.record_parse_error(url, f"브라우저 수집 실패: {exc}")
             return None
+
+    def _fetch_detail_pair(self, url: str) -> tuple[str | None, str | None]:
+        """상세 페이지 1회 로드로 (서버 HTML, 렌더링 DOM) 둘 다 얻는다.
+
+        - 서버 HTML(response.text): 갤러리 데이터(x-magento-init)가 여기에만 있음
+        - 렌더링 DOM(page.content): '대상 본체'(.label_platform)가 JS로 그려져 여기에만 있음
+        """
+        from common import robots
+        from common.http_client import polite_wait
+
+        if not robots.is_allowed(url):
+            self.record_parse_error(url, "robots.txt 규칙상 금지된 주소")
+            return None, None
+        try:
+            page = self._ensure_page()
+            polite_wait()
+            response = page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+            try:
+                server = response.text() if response else None
+            except Exception:
+                server = None
+            # 대상 본체(세대) 표기가 렌더될 때까지 잠깐 대기 (없으면 타임아웃 후 진행)
+            try:
+                page.wait_for_selector(".label_platform .attribute-item-val", timeout=8_000)
+            except Exception:
+                pass
+            rendered = page.content()
+            return server, rendered
+        except Exception:
+            logger.exception("[nintendo] 상세 로드 실패: %s", url)
+            return None, None
 
     def _close_browser(self) -> None:
         for closer in (
