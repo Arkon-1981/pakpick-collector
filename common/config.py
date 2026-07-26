@@ -40,6 +40,11 @@ STEAM_MAX_ITEMS = int(os.environ.get("STEAM_MAX_ITEMS", "800"))
 # 이미 갤러리가 채워진 상품은 재조회하지 않으므로 신규 상품에만 비용이 든다. 0이면 끔.
 STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 
+# 닌텐도 스크린샷 갤러리를 상위 N개까지 보강한다 (상품 상세 페이지 추가 로드).
+# 닌텐도는 봇 차단 때문에 상세도 실제 브라우저(Playwright)가 필요해 가장 느리므로 작게 둔다.
+# 이미 갤러리가 채워진 상품은 재조회하지 않는다. 0이면 끔.
+NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "60"))
+
 STORE_REGION = "KR"
 
 USER_AGENT = (
