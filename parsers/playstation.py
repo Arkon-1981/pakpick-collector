@@ -69,18 +69,24 @@ def _parse_epoch_ms(value) -> str | None:
         return None
 
 
-# 캐러셀 갤러리에 넣을 이미지 역할 우선순위 (LOGO=투명 로고는 제외)
-_PS_ROLE_PRIORITY = {
+# 대표 이미지(카드/캐러셀 첫 장)로 쓸 아트(키아트) 우선순위.
+# 이 역할들은 사실상 '같은 키아트'의 다른 크기/버전이라 캐러셀엔 1장만 쓴다.
+_PS_ART_PRIORITY = {
     "GAMEHUB_COVER_ART": 0, "MASTER": 1, "EDITION_KEY_ART": 2,
-    "FOUR_BY_THREE_BANNER": 3, "BACKGROUND": 4, "SCREENSHOT": 5,
+    "SIXTEEN_BY_NINE_BANNER": 3, "FOUR_BY_THREE_BANNER": 4,
 }
 
 
 def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
-    """media 배열에서 (대표 이미지, 갤러리 최대 5장)을 뽑는다."""
+    """media 배열에서 (대표 이미지, 갤러리)을 뽑는다.
+
+    갤러리 = [대표 키아트 1장] + [게임 스크린샷들].
+    (예전엔 키아트 여러 버전을 다 넣어 '같은 그림 다른 크기'가 반복됐음 → 스샷 위주로 교체)
+    """
     if not isinstance(media, list):
         return None, []
-    imgs: list[tuple[int, str]] = []
+    arts: list[tuple[int, str]] = []   # 대표 후보 (키아트)
+    shots: list[str] = []              # 게임 스크린샷
     for m in media:
         if isinstance(m, dict) and "__ref" in m:
             m = apollo.get(m["__ref"], {})
@@ -88,18 +94,26 @@ def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
             continue
         url = m.get("url")
         if not url or (m.get("type") not in (None, "IMAGE")):
-            continue
+            continue  # 동영상(PREVIEW) 등 제외
         role = m.get("role", "")
-        if role == "LOGO":  # 배경 투명 로고는 캐러셀에 부적합
-            continue
-        imgs.append((_PS_ROLE_PRIORITY.get(role, 99), url))
-    imgs.sort(key=lambda x: x[0])
+        if role == "SCREENSHOT":
+            if url not in shots:
+                shots.append(url)
+        elif role in _PS_ART_PRIORITY:
+            arts.append((_PS_ART_PRIORITY[role], url))
+        # LOGO(투명 로고)·BACKGROUND·PORTRAIT_BANNER 등은 대표/스샷 어느 쪽도 아님 → 제외
+
+    arts.sort(key=lambda x: x[0])
+    representative = arts[0][1] if arts else (shots[0] if shots else None)
+
     gallery: list[str] = []
-    for _, url in imgs:
+    if representative:
+        gallery.append(representative)
+    for url in shots:
         if url not in gallery:
             gallery.append(url)
-    gallery = gallery[:5]
-    return (gallery[0] if gallery else None), gallery
+    gallery = gallery[:6]  # 대표 1 + 스샷 최대 5
+    return representative, gallery
 
 
 def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:

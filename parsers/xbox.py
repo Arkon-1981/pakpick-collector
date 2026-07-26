@@ -29,7 +29,9 @@ from common.logging_util import get_logger
 logger = get_logger(__name__)
 
 
-_XBOX_IMG_PRIORITY = {"BoxArt": 0, "Poster": 1, "SuperHeroArt": 2, "BrandedKeyArt": 3, "Screenshot": 4}
+# 대표 이미지(카드/캐러셀 첫 장)로 쓸 아트 우선순위.
+# 이 용도들은 '같은 게임 아트'의 다른 형태(박스/포스터/키아트)라 캐러셀엔 1장만 쓴다.
+_XBOX_ART_PRIORITY = {"SuperHeroArt": 0, "TitledHeroArt": 1, "BrandedKeyArt": 2, "Poster": 3, "BoxArt": 4}
 
 
 def _norm_uri(uri: str | None) -> str | None:
@@ -39,17 +41,38 @@ def _norm_uri(uri: str | None) -> str | None:
 
 
 def _images(images: list) -> tuple[str | None, list[str]]:
-    """(대표 이미지, 갤러리 최대 5장)을 뽑는다."""
+    """(대표 이미지, 갤러리)을 뽑는다.
+
+    갤러리 = [대표 아트 1장] + [게임 스크린샷들].
+    (예전엔 박스/포스터/키아트를 다 넣어 '같은 그림 다른 형태'가 반복됐음 → 스샷 위주로 교체)
+    """
     if not images:
         return None, []
-    ordered = sorted(images, key=lambda im: _XBOX_IMG_PRIORITY.get(im.get("ImagePurpose", ""), 99))
-    gallery: list[str] = []
-    for im in ordered:
+    arts: list[tuple[int, str]] = []   # 대표 후보
+    shots: list[str] = []              # 게임 스크린샷
+    for im in images:
         uri = _norm_uri(im.get("Uri"))
-        if uri and uri not in gallery:
+        if not uri:
+            continue
+        purpose = im.get("ImagePurpose", "")
+        if purpose == "Screenshot":
+            if uri not in shots:
+                shots.append(uri)
+        elif purpose in _XBOX_ART_PRIORITY:
+            arts.append((_XBOX_ART_PRIORITY[purpose], uri))
+        # Logo/Tile/FeaturePromotionalSquareArt 등은 제외
+
+    arts.sort(key=lambda x: x[0])
+    representative = arts[0][1] if arts else (shots[0] if shots else None)
+
+    gallery: list[str] = []
+    if representative:
+        gallery.append(representative)
+    for uri in shots:
+        if uri not in gallery:
             gallery.append(uri)
-    gallery = gallery[:5]
-    return (gallery[0] if gallery else None), gallery
+    gallery = gallery[:6]  # 대표 1 + 스샷 최대 5
+    return (representative, gallery)
 
 
 def _extract_price(product: dict) -> dict:
