@@ -23,6 +23,14 @@ from storage import raw_storage
 logger = get_logger(__name__)
 
 
+def _median(values: list[int]) -> int:
+    """중앙값 (빈 리스트면 0). 전멸 방지 가드 기준선 계산용."""
+    if not values:
+        return 0
+    s = sorted(values)
+    return s[len(s) // 2]
+
+
 @dataclass
 class ParsedItem:
     """파서가 목록/상세에서 뽑아낸 상품 1개의 정보.
@@ -164,8 +172,9 @@ class BaseCollector:
     # ----- 실행 진입점 -----
 
     def run(self) -> None:
-        # 이상 감지 기준선: 직전에 실제로 수집된 실행의 상품 수 + 직전 실행 상태
-        baseline = repository.last_good_run(self.platform)
+        # 이상 감지 기준선: 최근 성공 수집 몇 건의 '중앙값'(단발성 등락에 덜 민감) + 직전 실행 상태
+        recent_counts = repository.recent_good_counts(self.platform, 3)
+        base_count = _median(recent_counts)
         prev_status = repository.last_finished_status(self.platform)
         self.run_id = repository.start_crawl_run(self.platform)
 
@@ -184,8 +193,7 @@ class BaseCollector:
             )
             raise
 
-        # 2) 전멸 방지 가드: 이번 수집이 직전 대비 급감했으면 크롤러 고장으로 처리
-        base_count = (baseline or {}).get("products_found") or 0
+        # 2) 전멸 방지 가드: 이번 수집이 최근 기준선(중앙값) 대비 급감했으면 크롤러 고장으로 처리
         if (
             base_count >= self.GUARD_MIN_BASELINE
             and self.products_found < base_count * self.GUARD_ANOMALY_RATIO
@@ -200,7 +208,7 @@ class BaseCollector:
                 except Exception:
                     logger.exception("[%s] 데이터 보호 갱신 실패", self.platform)
             msg = (
-                f"이상 감지: 이번 수집 {self.products_found}개 < 직전 {base_count}개의 "
+                f"이상 감지: 이번 수집 {self.products_found}개 < 최근 기준선(중앙값) {base_count}개의 "
                 f"{int(self.GUARD_ANOMALY_RATIO * 100)}% — 크롤러 고장 의심. "
                 f"기존 상품 {protected}건 보호(last_seen 갱신)."
             )

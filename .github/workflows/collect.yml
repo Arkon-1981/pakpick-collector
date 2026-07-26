@@ -9,9 +9,6 @@
 name: collect
 
 on:
-  # 테스트 기간: 코드를 올릴 때마다 자동 실행 (안정화되면 이 push 부분은 제거)
-  push:
-    branches: [main]
   schedule:
     # GitHub cron은 UTC 기준. 한국 시간 새벽 03:17 / 오후 15:17
     # (이용자가 적은 시간대 + 정각을 피해 부담 최소화)

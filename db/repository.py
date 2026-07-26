@@ -24,23 +24,23 @@ def _now() -> str:
 # ---------------------------------------------------------------
 # 전멸 방지 가드 보조
 # ---------------------------------------------------------------
-def last_good_run(platform: str) -> dict | None:
-    """직전에 '실제로 수집된' 실행(success/partial) 1건을 반환.
+def recent_good_counts(platform: str, n: int = 3) -> list[int]:
+    """최근 '실제로 수집된' 실행(success/partial) n건의 상품 수 목록.
 
-    반환: {"products_found": int, "status": str} 또는 None.
-    이상 감지(급감) 판단의 기준선으로 사용한다.
+    이상 감지(급감)의 기준선을 '직전 1건'이 아니라 최근 몇 건의 중앙값으로
+    잡기 위한 데이터. 세일 주기로 인한 단발성 등락에 덜 민감해진다.
     """
     res = (
         get_client()
         .table("crawl_runs")
-        .select("products_found,status")
+        .select("products_found")
         .eq("platform", platform)
         .in_("status", ["success", "partial"])
         .order("started_at", desc=True)
-        .limit(1)
+        .limit(n)
         .execute()
     )
-    return res.data[0] if res.data else None
+    return [(r.get("products_found") or 0) for r in (res.data or [])]
 
 
 def last_finished_status(platform: str) -> str | None:
