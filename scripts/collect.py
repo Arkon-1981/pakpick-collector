@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from collectors.nintendo import NintendoCollector          # noqa: E402
 from collectors.playstation import PlaystationCollector    # noqa: E402
+from collectors.steam import SteamCollector                # noqa: E402
 from collectors.xbox import XboxCollector                  # noqa: E402
 from common.logging_util import get_logger                 # noqa: E402
 
@@ -24,6 +25,7 @@ COLLECTORS = {
     "nintendo": NintendoCollector,
     "playstation": PlaystationCollector,
     "xbox": XboxCollector,
+    "steam": SteamCollector,
 }
 
 

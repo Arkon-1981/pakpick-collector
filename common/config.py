@@ -32,6 +32,10 @@ MAX_REQUESTS_PER_RUN = int(os.environ.get("MAX_REQUESTS_PER_RUN", "1500"))
 # 차단성 응답(202/403/429)이 연속으로 이 횟수만큼 오면 즉시 중단
 CONSECUTIVE_BLOCK_LIMIT = int(os.environ.get("CONSECUTIVE_BLOCK_LIMIT", "3"))
 
+# 스팀 할인작 수집 상한 (전 세계 베스트셀러 순 상위 N개만).
+# 스팀 할인은 수만 개라 전부 받으면 소규모 게임 노이즈 + DB 부담이 큼.
+STEAM_MAX_ITEMS = int(os.environ.get("STEAM_MAX_ITEMS", "800"))
+
 STORE_REGION = "KR"
 
 USER_AGENT = (
