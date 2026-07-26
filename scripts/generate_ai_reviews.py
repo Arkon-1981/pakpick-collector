@@ -123,12 +123,24 @@ def gen_review(title: str, model: str) -> str | None:
     }
     # 429(한도)면 백오프 후 재시도
     r = None
-    for attempt in range(3):
-        r = requests.post(
-            GEMINI_ENDPOINT.format(model=model),
-            headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_KEY},
-            json=body, timeout=60,
-        )
+    for attempt in range(4):
+        try:
+            r = requests.post(
+                GEMINI_ENDPOINT.format(model=model),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": GEMINI_KEY,
+                    "User-Agent": "pakpick-collector/1.0",
+                },
+                json=body, timeout=60,
+            )
+        except requests.exceptions.RequestException as exc:
+            # 연결 리셋/타임아웃 등 → 백오프 후 재시도 (지속 실패면 스킵)
+            wait = 5 * (attempt + 1)
+            print(f"  [연결오류 {exc.__class__.__name__}] {wait}s 후 재시도")
+            time.sleep(wait)
+            r = None
+            continue
         if r.status_code == 429:
             wait = 20 * (attempt + 1)
             print(f"  [429 한도] {wait}s 대기 후 재시도")
