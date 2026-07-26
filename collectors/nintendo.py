@@ -154,7 +154,8 @@ class NintendoCollector(BaseCollector):
         if not url:
             return
         try:
-            result = self._get_page(url)
+            # 서버 응답 HTML을 받아야 갤러리 스크립트(x-magento-init)가 들어 있다
+            result = self._get_page(url, raw_response=True)
         except Exception:
             logger.exception("[nintendo] 상세 갤러리 로드 실패: %s", url)
             return
@@ -214,14 +215,14 @@ class NintendoCollector(BaseCollector):
     # 페이지 가져오기 — 일반 요청 또는 실제 브라우저
     # -----------------------------------------------------------------
 
-    def _get_page(self, url: str) -> FetchResult | None:
+    def _get_page(self, url: str, raw_response: bool = False) -> FetchResult | None:
         if not self._use_browser:
             try:
                 result = fetch(url)
             except Exception as exc:
                 logger.warning("[nintendo] 일반 요청 실패: %s — 브라우저로 전환", exc)
                 self._use_browser = True
-                return self._get_page(url)
+                return self._get_page(url, raw_response)
 
             # 202/403 = 봇 차단 → 브라우저로 전환
             if result.status_code in (202, 403):
@@ -231,12 +232,16 @@ class NintendoCollector(BaseCollector):
                 )
                 self._use_browser = True
             else:
-                return result
+                return result  # 일반 요청 성공분은 이미 서버 HTML
 
-        return self._fetch_with_browser(url)
+        return self._fetch_with_browser(url, raw_response=raw_response)
 
-    def _fetch_with_browser(self, url: str) -> FetchResult | None:
+    def _fetch_with_browser(self, url: str, raw_response: bool = False) -> FetchResult | None:
         """Playwright로 실제 크롬을 띄워 페이지를 읽는다 (봇 차단 우회용).
+
+        raw_response=True 면 렌더링된 DOM(page.content()) 대신 **서버 응답 본문**을
+        돌려준다. 상세 갤러리 데이터(x-magento-init)는 서버 HTML에만 있고,
+        렌더링 DOM에는 requireJS가 제거해 없기 때문이다.
 
         안전장치: robots.txt 준수 + 사람 같은 간격 유지 +
         이미지/동영상/폰트는 내려받지 않아 상대 서버 부담 최소화.
@@ -269,8 +274,18 @@ class NintendoCollector(BaseCollector):
                 self._page = context.new_page()
 
             polite_wait()  # 사람 같은 간격 유지 (6~12초)
-            self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
-            # 상품 타일이 그려질 때까지 최대 20초 대기 (없어도 계속 진행)
+            response = self._page.goto(url, wait_until="domcontentloaded", timeout=60_000)
+
+            # 상세 갤러리용: 서버 응답 본문(렌더링 전 HTML)을 그대로 사용
+            if raw_response:
+                status = response.status if response else 200
+                try:
+                    body = response.text() if response else self._page.content()
+                except Exception:
+                    body = self._page.content()
+                return FetchResult(url, status, body.encode("utf-8"), {"x-fetched-via": "playwright-raw"})
+
+            # 목록용: 상품 타일이 그려질 때까지 최대 20초 대기 후 렌더링 DOM 사용
             try:
                 self._page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
             except Exception:
