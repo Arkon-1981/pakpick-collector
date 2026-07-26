@@ -162,6 +162,34 @@ def _find_gallery_data(obj):
     return None
 
 
+def parse_detail_generation(html: str) -> str | None:
+    """상세 페이지의 '대상 본체'(.label_platform) 항목으로 세대를 판별한다.
+
+    구조:
+      <div class="product-attribute label_platform ...">
+        <div class="attribute-item-val">Nintendo Switch</div>
+        <div class="attribute-item-val">Nintendo Switch 2</div>  ← 둘 다면 크로스젠
+      </div>
+    반환: "both" | "switch1" | "switch2" | None(판별 불가)
+    """
+    if not html:
+        return None
+    soup = BeautifulSoup(html, "lxml")
+    vals = [el.get_text(" ", strip=True) for el in soup.select(".label_platform .attribute-item-val")]
+    vals = [v for v in vals if v]
+    if not vals:
+        return None
+    has2 = any("Switch 2" in v for v in vals)
+    has1 = any("Switch" in v and "Switch 2" not in v for v in vals)
+    if has1 and has2:
+        return "both"
+    if has2:
+        return "switch2"
+    if has1:
+        return "switch1"
+    return None
+
+
 def _gallery_urls(gallery_data: list, limit: int) -> list[str]:
     """갤러리 data 배열 → 이미지 URL 목록 (대표 isMain 먼저, 동영상 제외)."""
     mains: list[str] = []
