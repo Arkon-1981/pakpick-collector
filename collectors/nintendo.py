@@ -57,8 +57,11 @@ class NintendoCollector(BaseCollector):
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
-        enriched = 0  # 갤러리 보강한 상품 수 (상위 NINTENDO_GALLERY_MAX개만)
         sw2_ids: set[str] | None = None  # SW2 필터 상품 ID. None = 미확보
+        # (item, raw_doc_id) 를 모아뒀다가, 갤러리 보강은 목록을 다 모은 뒤
+        # '할인율 상위'부터 처리한다. 피드가 할인율 순으로 보여주므로,
+        # 목록 등장 순서가 아니라 할인율 순으로 보강해야 피드에 스크린샷이 채워진다.
+        collected: list[tuple] = []
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -115,23 +118,41 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지는 전부 중복 — 수집 종료", page)
                 break
 
-            have_filter = bool(sw2_ids)
             for item in new_items:
-                pid = item.store_product_id
-                seen_ids.add(pid)
-                in_sw2 = pid in sw2_ids
-                # SW2 후보가 아니면 그냥 switch1 (필터가 동작한 경우만 태깅)
-                if have_filter and not in_sw2:
-                    item.extracted_data["platform_generation"] = "switch1"
-                want_gallery = enriched < config.NINTENDO_GALLERY_MAX
-                # SW2 후보(세대 확정 필요) 또는 갤러리 대상이면 상세를 본다
-                if in_sw2 or want_gallery:
-                    self._enrich_detail(item, in_sw2=in_sw2, want_gallery=want_gallery)
-                if want_gallery:
-                    enriched += 1
-                self.save_item(item, raw_doc_id)
+                seen_ids.add(item.store_product_id)
+                collected.append((item, raw_doc_id))
 
-            logger.info("[nintendo] %d페이지: 상품 %d개 처리", page, len(new_items))
+            logger.info("[nintendo] %d페이지: 상품 %d개 수집", page, len(new_items))
+
+        if not collected:
+            return
+
+        have_filter = bool(sw2_ids)
+        # 갤러리 보강 대상: 할인율 상위 NINTENDO_GALLERY_MAX개 (피드에 뜨는 것과 일치)
+        by_disc = sorted(
+            collected, key=lambda t: t[0].discount_percent or 0, reverse=True
+        )
+        gallery_ids = {
+            item.store_product_id
+            for item, _ in by_disc[: config.NINTENDO_GALLERY_MAX]
+        }
+
+        for item, raw_doc_id in collected:
+            pid = item.store_product_id
+            in_sw2 = pid in sw2_ids
+            # SW2 후보가 아니면 그냥 switch1 (필터가 동작한 경우만 태깅)
+            if have_filter and not in_sw2:
+                item.extracted_data["platform_generation"] = "switch1"
+            want_gallery = pid in gallery_ids
+            # SW2 후보(세대 확정 필요) 또는 갤러리 대상이면 상세를 본다
+            if in_sw2 or want_gallery:
+                self._enrich_detail(item, in_sw2=in_sw2, want_gallery=want_gallery)
+            self.save_item(item, raw_doc_id)
+
+        logger.info(
+            "[nintendo] 총 %d개 저장 (갤러리 대상 상위 %d개)",
+            len(collected), len(gallery_ids),
+        )
 
     # -----------------------------------------------------------------
     # 상세 스크린샷 갤러리 보강
