@@ -20,7 +20,7 @@ on:
         required: false
         default: "all"
         type: choice
-        options: [all, nintendo, playstation, xbox]
+        options: [all, nintendo, playstation, xbox, steam]
 
 jobs:
   collect:
@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false        # 한 플랫폼이 실패해도 나머지는 계속
       matrix:
-        platform: [nintendo, playstation, xbox]
+        platform: [nintendo, playstation, xbox, steam]
     steps:
       - name: 코드 내려받기
         uses: actions/checkout@v4
