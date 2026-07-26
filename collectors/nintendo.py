@@ -19,7 +19,8 @@ from collectors.base import BaseCollector
 from common import config
 from common.http_client import FetchResult, fetch
 from common.logging_util import get_logger
-from parsers.nintendo import parse_list_page
+from db import repository
+from parsers.nintendo import parse_detail_gallery, parse_list_page
 
 logger = get_logger(__name__)
 
@@ -55,6 +56,7 @@ class NintendoCollector(BaseCollector):
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
+        enriched = 0  # 갤러리 보강한 상품 수 (상위 NINTENDO_GALLERY_MAX개만)
         # Switch 2 상품 ID 집합. None = 아직 미확보, set() = 확보 실패(태깅 안 함)
         switch2_ids: set[str] | None = None
 
@@ -119,9 +121,55 @@ class NintendoCollector(BaseCollector):
                 if switch2_ids:
                     gen = "switch2" if item.store_product_id in switch2_ids else "switch1"
                     item.extracted_data["platform_generation"] = gen
+                # 상위 인기작에 상세 스크린샷 갤러리 보강 (이미 있으면 재사용)
+                if enriched < config.NINTENDO_GALLERY_MAX:
+                    self._ensure_gallery(item)
+                    enriched += 1
                 self.save_item(item, raw_doc_id)
 
             logger.info("[nintendo] %d페이지: 상품 %d개 처리", page, len(new_items))
+
+    # -----------------------------------------------------------------
+    # 상세 스크린샷 갤러리 보강
+    # -----------------------------------------------------------------
+
+    def _ensure_gallery(self, item) -> None:
+        """상품 상세 페이지에서 스크린샷 갤러리를 채운다 (캐러셀용).
+
+        이미 갤러리(2장 이상)가 저장된 상품은 상세 페이지를 다시 열지 않고
+        기존 갤러리를 그대로 재사용한다 → 신규 상품에만 비용이 든다.
+        실패해도 기존 썸네일 1장은 그대로 남아 수집이 깨지지 않는다.
+        """
+        try:
+            existing = repository.get_item_gallery(
+                "nintendo", config.STORE_REGION, item.store_product_id
+            )
+        except Exception:
+            existing = None
+        if existing and len(existing) > 1:
+            item.extracted_data["gallery"] = existing
+            return
+
+        url = item.store_url
+        if not url:
+            return
+        try:
+            result = self._get_page(url)
+        except Exception:
+            logger.exception("[nintendo] 상세 갤러리 로드 실패: %s", url)
+            return
+        if result is None or result.status_code != 200:
+            return
+
+        self.save_raw(
+            result, document_type="detail",
+            filename=f"detail-{item.store_product_id}.html",
+            store_product_id=item.store_product_id,
+            content_type="text/html",
+        )
+        shots = parse_detail_gallery(result.text)
+        if shots:
+            item.extracted_data["gallery"] = shots  # [대표(isMain), 스크린샷...]
 
     # -----------------------------------------------------------------
     # Switch 1 / Switch 2 세대 구분

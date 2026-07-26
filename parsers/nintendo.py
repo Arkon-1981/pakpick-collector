@@ -16,6 +16,7 @@
 확인해서 셀렉터를 조정해야 할 수 있다. 원본은 항상 저장되므로
 파서를 고친 뒤 과거 데이터를 다시 처리할 수 있다.
 """
+import json
 import re
 
 from bs4 import BeautifulSoup
@@ -141,3 +142,61 @@ def parse_list_page(html: str) -> list[ParsedItem]:
     if not items:
         logger.warning("닌텐도 목록에서 상품을 하나도 찾지 못함 — HTML 구조 변경 가능성. 원본을 확인하세요.")
     return items
+
+
+def _find_gallery_data(obj):
+    """중첩된 x-magento-init JSON에서 'mage/gallery/gallery'의 data 배열을 찾는다."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "mage/gallery/gallery" and isinstance(v, dict) and isinstance(v.get("data"), list):
+                return v["data"]
+            found = _find_gallery_data(v)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for v in obj:
+            found = _find_gallery_data(v)
+            if found:
+                return found
+    return None
+
+
+def parse_detail_gallery(html: str, limit: int = 6) -> list[str]:
+    """상품 상세 페이지(Magento)에서 갤러리 이미지 URL을 뽑는다.
+
+    Magento 2는 <script type="text/x-magento-init"> 안에
+    "mage/gallery/gallery": {"data": [{"img","full","thumb","isMain","type"}...]}
+    형태로 미디어 갤러리를 심는다. 대표(isMain) 이미지를 먼저, 그다음 스크린샷 순.
+    구조를 못 찾으면 빈 리스트 → 호출측이 기존 썸네일을 유지한다.
+    """
+    soup = BeautifulSoup(html, "lxml")
+    for script in soup.find_all("script", type="text/x-magento-init"):
+        if not script.string or "mage/gallery/gallery" not in script.string:
+            continue
+        try:
+            data = json.loads(script.string)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        gallery_data = _find_gallery_data(data)
+        if not gallery_data:
+            continue
+        mains: list[str] = []
+        others: list[str] = []
+        for entry in gallery_data:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("type") not in (None, "image"):  # 동영상 제외
+                continue
+            url = entry.get("full") or entry.get("img") or entry.get("thumb")
+            if not url:
+                continue
+            if url.startswith("//"):  # 프로토콜 생략 URL 정규화
+                url = "https:" + url
+            (mains if entry.get("isMain") else others).append(url)
+        ordered: list[str] = []
+        for url in mains + others:
+            if url not in ordered:
+                ordered.append(url)
+        if ordered:
+            return ordered[:limit]
+    return []
