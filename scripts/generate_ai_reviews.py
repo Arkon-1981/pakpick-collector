@@ -60,9 +60,13 @@ def clean_title(raw: str) -> str:
 
 def fetch_candidates(limit: int) -> list[dict]:
     """할인 중 + 리뷰 없음 게임을 정가 높은 순(대작 우선)으로 고른다."""
-    # 이미 리뷰가 있는 store_item_id 집합
-    existing = _sb("ai_reviews?select=store_item_id") or []
-    have = {row["store_item_id"] for row in existing}
+    # 이미 리뷰가 있는 store_item_id 집합 (PostgREST 1000행 상한 → 페이지네이션)
+    have: set = set()
+    for offset in range(0, 100_000, 1000):
+        page = _sb(f"ai_reviews?select=store_item_id&limit=1000&offset={offset}") or []
+        have.update(row["store_item_id"] for row in page)
+        if len(page) < 1000:
+            break
 
     # 신선(48h) + 할인 중인 상품을 정가 순으로
     from datetime import timedelta

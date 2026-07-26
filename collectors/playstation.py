@@ -94,15 +94,18 @@ class PlaystationCollector(BaseCollector):
                 break
 
             items = parse_products_from_next_data(next_data)
-            new_items = [i for i in items if i.store_product_id not in seen_ids]
-            if not new_items:
-                break  # 이 카테고리에서 더 이상 새 상품 없음
+            # 페이지에 상품이 아예 없어야 카테고리 끝 (여기서만 break).
+            # 카테고리끼리 상품이 겹쳐 new_items가 비어도, 다음 페이지엔
+            # 새 상품이 있을 수 있으므로 break 하지 않고 계속 넘긴다.
+            if not items:
+                break
 
+            new_items = [i for i in items if i.store_product_id not in seen_ids]
             for item in new_items:
                 seen_ids.add(item.store_product_id)
                 self.save_item(item, raw_doc_id)
 
             logger.info(
-                "[playstation] 카테고리 %s %d페이지: 상품 %d개",
-                category_id[:8], page, len(new_items),
+                "[playstation] 카테고리 %s %d페이지: 상품 %d개 (신규 %d)",
+                category_id[:8], page, len(items), len(new_items),
             )

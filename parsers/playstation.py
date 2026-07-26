@@ -119,16 +119,17 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
 
     base = _parse_krw(price_node.get("basePrice"))
     discounted = _parse_krw(price_node.get("discountedPrice"))
-    discount_text = price_node.get("discountText")  # 예: "-25%"
-    discount_percent = None
-    if discount_text:
-        m = re.search(r"(\d+(?:\.\d+)?)", discount_text)
-        if m:
-            discount_percent = float(m.group(1))
-
     is_on_sale = (
         base is not None and discounted is not None and discounted < base
     )
+
+    # 할인율은 실제 세일 중일 때만 (비세일 상품에 잔여 discountText가 붙는 경우 방지)
+    discount_percent = None
+    discount_text = price_node.get("discountText")  # 예: "-25%"
+    if is_on_sale and discount_text:
+        m = re.search(r"(\d+(?:\.\d+)?)", discount_text)
+        if m:
+            discount_percent = float(m.group(1))
 
     # 이미지: media 배열에서 대표 이미지 + 갤러리(캐러셀용) 추출
     image_url, gallery = _images_from_media(node.get("media"), apollo)
