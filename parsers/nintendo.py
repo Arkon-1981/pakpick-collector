@@ -18,6 +18,7 @@
 """
 import json
 import re
+from html import unescape
 
 from bs4 import BeautifulSoup
 
@@ -161,42 +162,62 @@ def _find_gallery_data(obj):
     return None
 
 
+def _gallery_urls(gallery_data: list, limit: int) -> list[str]:
+    """갤러리 data 배열 → 이미지 URL 목록 (대표 isMain 먼저, 동영상 제외)."""
+    mains: list[str] = []
+    others: list[str] = []
+    for entry in gallery_data:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") not in (None, "image"):  # 동영상 제외
+            continue
+        url = entry.get("full") or entry.get("img") or entry.get("thumb")
+        if not url:
+            continue
+        if url.startswith("//"):  # 프로토콜 생략 URL 정규화
+            url = "https:" + url
+        (mains if entry.get("isMain") else others).append(url)
+    ordered: list[str] = []
+    for url in mains + others:
+        if url not in ordered:
+            ordered.append(url)
+    return ordered[:limit]
+
+
 def parse_detail_gallery(html: str, limit: int = 6) -> list[str]:
     """상품 상세 페이지(Magento)에서 갤러리 이미지 URL을 뽑는다.
 
-    Magento 2는 <script type="text/x-magento-init"> 안에
-    "mage/gallery/gallery": {"data": [{"img","full","thumb","isMain","type"}...]}
-    형태로 미디어 갤러리를 심는다. 대표(isMain) 이미지를 먼저, 그다음 스크린샷 순.
+    Magento 2는 미디어 갤러리를 아래 둘 중 하나로 심는다:
+      - <script type="text/x-magento-init"> 안의 JSON
+      - 요소의 data-mage-init="..." 속성 (HTML 이스케이프됨)
+    둘 다에서 "mage/gallery/gallery": {"data": [{"img","full","thumb","isMain","type"}...]}
+    를 찾아 대표(isMain) 먼저, 그다음 스크린샷 순으로 URL을 뽑는다.
+
+    ⚠️ 반드시 '서버 응답 HTML'을 넣어야 한다. 렌더링된 DOM(page.content())은
+    requireJS가 이 스크립트를 이미 제거한 뒤라 갤러리 데이터가 없다.
     구조를 못 찾으면 빈 리스트 → 호출측이 기존 썸네일을 유지한다.
     """
-    soup = BeautifulSoup(html, "lxml")
-    for script in soup.find_all("script", type="text/x-magento-init"):
-        if not script.string or "mage/gallery/gallery" not in script.string:
+    blobs: list[str] = []
+    # (a) x-magento-init 스크립트 본문
+    for m in re.finditer(
+        r'<script[^>]*type=["\']text/x-magento-init["\'][^>]*>(.*?)</script>',
+        html, re.S | re.I,
+    ):
+        blobs.append(m.group(1))
+    # (b) data-mage-init 속성값 (HTML 이스케이프될 수 있어 언이스케이프)
+    for m in re.finditer(r'data-mage-init=(["\'])(.*?)\1', html, re.S):
+        blobs.append(unescape(m.group(2)))
+
+    for blob in blobs:
+        if "mage/gallery/gallery" not in blob:
             continue
         try:
-            data = json.loads(script.string)
+            data = json.loads(blob.strip())
         except (json.JSONDecodeError, TypeError):
             continue
         gallery_data = _find_gallery_data(data)
-        if not gallery_data:
-            continue
-        mains: list[str] = []
-        others: list[str] = []
-        for entry in gallery_data:
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("type") not in (None, "image"):  # 동영상 제외
-                continue
-            url = entry.get("full") or entry.get("img") or entry.get("thumb")
-            if not url:
-                continue
-            if url.startswith("//"):  # 프로토콜 생략 URL 정규화
-                url = "https:" + url
-            (mains if entry.get("isMain") else others).append(url)
-        ordered: list[str] = []
-        for url in mains + others:
-            if url not in ordered:
-                ordered.append(url)
-        if ordered:
-            return ordered[:limit]
+        if gallery_data:
+            urls = _gallery_urls(gallery_data, limit)
+            if urls:
+                return urls
     return []
