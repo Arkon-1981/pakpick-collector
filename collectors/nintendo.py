@@ -208,9 +208,7 @@ class NintendoCollector(BaseCollector):
         if in_sw2:
             gen = parse_detail_generation(rendered_html) if rendered_html else None
             item.extracted_data["platform_generation"] = gen or "switch2"
-            if self._diag_count < 6:
-                self._diag_count += 1
-                self._log_gen_diag(pid, server_html, rendered_html, gen)
+            self._log_gen_diag(pid, server_html, rendered_html, gen)
 
         # 갤러리: 서버 HTML에서 추출 (재사용 가능하면 그대로)
         if want_gallery:
@@ -222,29 +220,33 @@ class NintendoCollector(BaseCollector):
                     item.extracted_data["gallery"] = shots  # [대표, 스크린샷...]
 
     def _log_gen_diag(self, pid, server_html, rendered_html, gen) -> None:
-        """세대 판별이 왜 실패하는지 추적하기 위한 진단 로그 (앞 몇 개만).
+        """SW2 후보의 실제 '대상 본체' 값과 주변 HTML을 남긴다 (both 미검출 원인 추적).
 
-        렌더링 DOM/서버 HTML 각각에서 'Switch 2' 주변 구조와, 세대 라벨로 추정되는
-        키워드(대상 본체/label_platform 등)의 존재 여부를 남긴다. 이 로그로 실제 셀렉터를
-        확정한 뒤 parse_detail_generation 을 정확히 고친다.
+        - server_vals/rendered_vals: .label_platform .attribute-item-val 실제 텍스트 목록
+          (여기에 두 기종이 다 있으면 both 여야 한다)
+        - 앞 8개는 '대상 본체' 주변 원본 HTML도 찍어 실제 DOM 구조를 확인한다.
         """
-        def probe(tag: str, html: str | None) -> None:
+        from bs4 import BeautifulSoup
+
+        def vals_of(html: str | None):
             if not html:
-                logger.info("[nintendo][diag] pid=%s %s=(없음)", pid, tag)
-                return
-            i = html.find("Switch 2")
-            excerpt = repr(html[max(0, i - 300):i + 140]) if i >= 0 else "(no 'Switch 2')"
-            logger.info(
-                "[nintendo][diag] pid=%s %s len=%d label_platform=%s 대상본체=%s 대응기종=%s "
-                "지원기종=%s sw2_excerpt=%s",
-                pid, tag, len(html),
-                "label_platform" in html, "대상 본체" in html,
-                "대응 기종" in html, "지원 기종" in html,
-                excerpt[:560],
-            )
-        logger.info("[nintendo][diag] pid=%s parsed_gen=%s", pid, gen)
-        probe("rendered", rendered_html)
-        probe("server", server_html)
+                return None
+            try:
+                soup = BeautifulSoup(html, "lxml")
+                return [el.get_text(" ", strip=True) for el in soup.select(".label_platform .attribute-item-val")]
+            except Exception as e:  # 파싱 실패해도 로깅은 계속
+                return f"ERR:{e}"
+
+        logger.info(
+            "[nintendo][diag] pid=%s parsed_gen=%s server_vals=%s rendered_vals=%s",
+            pid, gen, vals_of(server_html), vals_of(rendered_html),
+        )
+        if self._diag_count < 8:
+            self._diag_count += 1
+            html = server_html or rendered_html or ""
+            i = html.find("대상 본체")
+            excerpt = repr(html[max(0, i - 40):i + 320]) if i >= 0 else "(no '대상 본체')"
+            logger.info("[nintendo][diag] pid=%s 대상본체_excerpt=%s", pid, excerpt[:560])
 
     # -----------------------------------------------------------------
     # Switch 1 / Switch 2 세대 구분
