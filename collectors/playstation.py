@@ -17,6 +17,7 @@ from collectors.base import BaseCollector
 from common import config
 from common.http_client import fetch
 from common.logging_util import get_logger
+from db import repository
 from parsers.playstation import (
     extract_next_data,
     parse_detail_end_time,
@@ -39,8 +40,9 @@ class PlaystationCollector(BaseCollector):
 
     def collect(self) -> None:
         seen_ids: set[str] = set()
-        # (item, raw_doc_id) 를 모아뒀다가, 종료일 보강은 할인율 상위부터 처리한 뒤 저장한다.
-        collected: list[tuple] = []
+        # 이미 '저장된' 상품들(종료일 보강 후보). 저장은 페이지 단위로 즉시 하고,
+        # 종료일 보강은 목록 크롤이 끝난 뒤 할인율 상위 N개만 상세로 덧입힌다.
+        saved: list = []
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -65,7 +67,8 @@ class PlaystationCollector(BaseCollector):
             for item in parse_products_from_next_data(next_data):
                 if item.store_product_id not in seen_ids:
                     seen_ids.add(item.store_product_id)
-                    collected.append((item, raw_doc_id))
+                    self.save_item(item, raw_doc_id)  # 즉시 저장(부분 실패해도 데이터 보존)
+                    saved.append(item)
         else:
             self.record_parse_error(DEALS_URL, "__NEXT_DATA__를 찾지 못함")
 
@@ -73,16 +76,14 @@ class PlaystationCollector(BaseCollector):
         category_ids = list(dict.fromkeys(CATEGORY_URL_RE.findall(result.text)))
         logger.info("[playstation] 프로모션 카테고리 %d개 발견", len(category_ids))
 
-        # 3. 각 카테고리를 페이지 단위로 순회
+        # 3. 각 카테고리를 페이지 단위로 순회 (페이지마다 즉시 저장)
         for category_id in category_ids[:MAX_CATEGORIES]:
-            self._collect_category(category_id, seen_ids, collected)
+            self._collect_category(category_id, seen_ids, saved)
 
-        # 4. 할인 종료일 보강(상세 페이지) 후 저장
-        self._enrich_end_dates(collected)
-        for item, rid in collected:
-            self.save_item(item, rid)
+        # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신
+        self._enrich_end_dates(saved)
 
-    def _collect_category(self, category_id: str, seen_ids: set[str], collected: list) -> None:
+    def _collect_category(self, category_id: str, seen_ids: set[str], saved: list) -> None:
         for page in range(1, MAX_CATEGORY_PAGES + 1):
             url = f"{BASE}/ko-kr/category/{category_id}/{page}"
             result = fetch(url)
@@ -115,38 +116,43 @@ class PlaystationCollector(BaseCollector):
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             for item in new_items:
                 seen_ids.add(item.store_product_id)
-                collected.append((item, raw_doc_id))
+                self.save_item(item, raw_doc_id)  # 즉시 저장
+                saved.append(item)
 
             logger.info(
                 "[playstation] 카테고리 %s %d페이지: 상품 %d개 (신규 %d)",
                 category_id[:8], page, len(items), len(new_items),
             )
 
-    def _enrich_end_dates(self, collected: list) -> None:
-        """할인율 상위 N개 상품의 상세 페이지를 받아 할인 종료일(sale_end_at)을 채운다.
+    def _enrich_end_dates(self, saved: list) -> None:
+        """할인율 상위 N개 상품의 상세 페이지에서 할인 종료일을 받아 최신 스냅샷에 덧입힌다.
 
-        목록 페이지엔 endTime이 없고 상세 페이지(Price 노드)에만 있어, 피드에 노출되는
-        상위 상품만 보강한다. 상세 원본은 저장하지 않는다(종료일만 필요, 스토리지 절약).
+        목록 페이지엔 endTime이 없고 상세 페이지(Price 노드)에만 있다. 상품 자체는 이미
+        저장돼 있으므로, 여기서는 최신 price_snapshot의 sale_end_at만 in-place 갱신한다.
+        상세 fetch/갱신 실패나 요청상한 도달은 흡수한다(이미 저장된 데이터는 안전).
         """
         limit = config.PS_DETAIL_END_MAX
         if limit <= 0:
             return
         targets = [
-            (it, rid) for it, rid in collected
+            it for it in saved
             if it.is_on_sale and it.sale_end_at is None and it.store_url
         ]
-        targets.sort(key=lambda t: t[0].discount_percent or 0, reverse=True)
+        targets.sort(key=lambda it: it.discount_percent or 0, reverse=True)
 
         done = 0
-        for item, _ in targets[:limit]:
+        for item in targets[:limit]:
             try:
                 res = fetch(item.store_url)
+                if res.status_code != 200:
+                    continue
+                end_at = parse_detail_end_time(res.text, item.final_price)
+                if end_at and repository.update_latest_sale_end(
+                    self.platform, config.STORE_REGION, item.store_product_id, end_at
+                ):
+                    done += 1
             except Exception:
+                # 요청상한/네트워크/파싱 실패는 무시 — 상품은 이미 저장됨
+                logger.exception("[playstation] 종료일 보강 실패: %s", item.store_product_id)
                 continue
-            if res.status_code != 200:
-                continue
-            end_at = parse_detail_end_time(res.text, item.final_price)
-            if end_at:
-                item.sale_end_at = end_at
-                done += 1
         logger.info("[playstation] 할인 종료일 보강 %d건 (대상 상위 %d)", done, min(limit, len(targets)))

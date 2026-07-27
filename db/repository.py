@@ -318,6 +318,44 @@ def upsert_store_item(
 # 가격 (price_snapshots)
 # ---------------------------------------------------------------
 
+def update_latest_sale_end(
+    platform: str, store_region: str, store_product_id: str, sale_end_at: str
+) -> bool:
+    """이미 저장된 상품의 '가장 최근 price_snapshot' 할인 종료시각만 제자리 갱신한다.
+
+    PS 종료일 보강용: 목록 수집 때 이미 저장된 스냅샷에 상세에서 얻은 sale_end_at을
+    덧입힌다. price_hash는 건드리지 않는다(다음 수집의 변동 감지가 종료일 때문에 흔들려
+    불필요한 스냅샷이 쌓이는 것을 막기 위함). 대상 상품/스냅샷이 없으면 False.
+    """
+    client = get_client()
+    item = (
+        client.table("store_items")
+        .select("id")
+        .eq("platform", platform)
+        .eq("store_region", store_region)
+        .eq("store_product_id", store_product_id)
+        .limit(1)
+        .execute()
+    )
+    if not item.data:
+        return False
+    item_id = item.data[0]["id"]
+    latest = (
+        client.table("price_snapshots")
+        .select("id")
+        .eq("store_item_id", item_id)
+        .order("collected_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not latest.data:
+        return False
+    client.table("price_snapshots").update({"sale_end_at": sale_end_at}).eq(
+        "id", latest.data[0]["id"]
+    ).execute()
+    return True
+
+
 def insert_price_snapshot_if_changed(
     *,
     store_item_id: int,

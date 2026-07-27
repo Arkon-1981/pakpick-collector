@@ -52,7 +52,7 @@ NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "150"))
 
 # PS 할인 종료일(endTime)은 목록 페이지엔 없고 상품 상세 페이지에만 있다.
 # 할인율 상위 N개만 상세를 추가로 받아 종료일을 보강한다(봇 차단 없어 일반 HTTP, 빠름). 0이면 끔.
-PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "150"))
+PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "60"))
 
 STORE_REGION = "KR"
 
