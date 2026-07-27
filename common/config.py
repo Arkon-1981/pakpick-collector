@@ -50,6 +50,10 @@ STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 # 느리지만, 이미 갤러리가 채워진 상품은 재조회하지 않아 신규분에만 비용이 든다. 0이면 끔.
 NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "150"))
 
+# PS 할인 종료일(endTime)은 목록 페이지엔 없고 상품 상세 페이지에만 있다.
+# 할인율 상위 N개만 상세를 추가로 받아 종료일을 보강한다(봇 차단 없어 일반 HTTP, 빠름). 0이면 끔.
+PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "150"))
+
 STORE_REGION = "KR"
 
 USER_AGENT = (

@@ -69,6 +69,37 @@ def _parse_epoch_ms(value) -> str | None:
         return None
 
 
+# 상세 페이지의 Price 노드에 있는 할인 종료시각. 목록(SkuPrice)엔 없고 상세에만 있다.
+# 한 상세 페이지에 여러 에디션 가격이 있을 수 있어, 같은 price 객체 안의
+# discountedValue(할인가 정수)로 대상 상품을 매칭한다.
+_END_DISCOUNTED_RE = re.compile(
+    r'"endTime":"(\d{13})"[^{}]*?"discountedValue":(\d+)'
+)
+_END_ANY_RE = re.compile(r'"endTime":"(\d{13})"')
+
+
+def parse_detail_end_time(html: str, target_discounted: float | None = None) -> str | None:
+    """상품 상세 HTML(__NEXT_DATA__)에서 할인 종료시각(ISO)을 뽑는다.
+
+    price 객체가 중첩 JSON 문자열로 이스케이프돼 있을 수 있어(\\") 먼저 정규화한다.
+    target_discounted(할인가)와 같은 discountedValue를 가진 endTime을 우선 매칭하고,
+    못 찾으면 첫 endTime을 쓴다. 없으면 None.
+    """
+    if not html:
+        return None
+    norm = html.replace('\\"', '"')
+    pairs = _END_DISCOUNTED_RE.findall(norm)
+    if pairs:
+        if target_discounted is not None:
+            tgt = int(round(target_discounted))
+            for et, dv in pairs:
+                if int(dv) == tgt:
+                    return _parse_epoch_ms(et)
+        return _parse_epoch_ms(pairs[0][0])
+    m = _END_ANY_RE.search(norm)
+    return _parse_epoch_ms(m.group(1)) if m else None
+
+
 # 대표 이미지(카드/캐러셀 첫 장)로 쓸 아트(키아트) 우선순위.
 # 이 역할들은 사실상 '같은 키아트'의 다른 크기/버전이라 캐러셀엔 1장만 쓴다.
 _PS_ART_PRIORITY = {
