@@ -12,6 +12,7 @@ HTML 셀렉터 파싱보다 이 JSON을 읽는 것이 훨씬 안정적이다.
   3. 각 카테고리의 페이지들을 순서대로 요청 → 원본 저장 → 상품 추출
 """
 import re
+import time
 
 from collectors.base import BaseCollector
 from common import config
@@ -43,6 +44,10 @@ class PlaystationCollector(BaseCollector):
         # 이미 '저장된' 상품들(종료일 보강 후보). 저장은 페이지 단위로 즉시 하고,
         # 종료일 보강은 목록 크롤이 끝난 뒤 할인율 상위 N개만 상세로 덧입힌다.
         saved: list = []
+
+        # 목록 크롤 시간예산. 이 시각을 넘기면 남은 카테고리/페이지를 건너뛰고
+        # 종료일 보강 단계로 넘어간다(잡 타임아웃 전에 보강이 반드시 실행되도록).
+        crawl_deadline = time.monotonic() + config.PS_CRAWL_BUDGET_SECONDS
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -78,14 +83,25 @@ class PlaystationCollector(BaseCollector):
 
         # 3. 각 카테고리를 페이지 단위로 순회 (페이지마다 즉시 저장)
         for category_id in category_ids[:MAX_CATEGORIES]:
-            self._collect_category(category_id, seen_ids, saved)
+            if time.monotonic() >= crawl_deadline:
+                logger.info(
+                    "[playstation] 크롤 시간예산(%d분) 소진 — 남은 카테고리 건너뛰고 종료일 보강으로",
+                    config.PS_CRAWL_BUDGET_SECONDS // 60,
+                )
+                break
+            self._collect_category(category_id, seen_ids, saved, crawl_deadline)
 
-        # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신
+        # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신.
+        #    크롤이 시간예산으로 조기 종료되어도 이 단계는 반드시 실행된다.
         self._enrich_end_dates(saved)
 
-    def _collect_category(self, category_id: str, seen_ids: set[str], saved: list) -> None:
+    def _collect_category(
+        self, category_id: str, seen_ids: set[str], saved: list, deadline: float
+    ) -> None:
         no_new_streak = 0  # 신규 상품 0건인 페이지가 연속으로 나온 횟수
         for page in range(1, MAX_CATEGORY_PAGES + 1):
+            if time.monotonic() >= deadline:
+                break  # 시간예산 소진 — 이 카테고리도 중단
             url = f"{BASE}/ko-kr/category/{category_id}/{page}"
             result = fetch(url)
 

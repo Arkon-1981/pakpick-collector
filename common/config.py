@@ -54,6 +54,14 @@ NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "150"))
 # 할인율 상위 N개만 상세를 추가로 받아 종료일을 보강한다(봇 차단 없어 일반 HTTP, 빠름). 0이면 끔.
 PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "60"))
 
+# PS 목록 크롤에 쓸 최대 시간(초). 이 시간이 지나면 남은 카테고리/페이지를 건너뛰고
+# 곧바로 '할인 종료일 보강' 단계로 넘어간다. PS 목록은 카테고리×페이지가 많아 정중한
+# 간격(6~12초)으로 전부 훑으면 GitHub Actions 잡 타임아웃(120분)을 넘겨 잡이 통째로
+# 취소되고, 그러면 크롤 뒤에 실행되는 종료일 보강이 아예 못 돌던 문제가 있었다.
+# 크롤을 이 시간으로 제한해, 남은 시간(보강 상위 N개 상세 요청) 안에서 종료일 보강이
+# 반드시 실행되도록 보장한다. 기본 85분(보강·마무리에 ~35분 여유).
+PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "5100"))
+
 STORE_REGION = "KR"
 
 USER_AGENT = (
