@@ -20,7 +20,7 @@ from common import config
 from common.http_client import FetchResult, fetch
 from common.logging_util import get_logger
 from db import repository
-from parsers.nintendo import parse_detail_gallery, parse_detail_generation, parse_list_page
+from parsers.nintendo import parse_detail_gallery, parse_list_page
 
 logger = get_logger(__name__)
 
@@ -57,8 +57,11 @@ class NintendoCollector(BaseCollector):
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
-        enriched = 0  # 갤러리 보강한 상품 수 (상위 NINTENDO_GALLERY_MAX개만)
         sw2_ids: set[str] | None = None  # SW2 필터 상품 ID. None = 미확보
+        # (item, raw_doc_id) 를 모아뒀다가, 갤러리 보강은 목록을 다 모은 뒤
+        # '할인율 상위'부터 처리한다. 피드가 할인율 순으로 보여주므로,
+        # 목록 등장 순서가 아니라 할인율 순으로 보강해야 피드에 스크린샷이 채워진다.
+        collected: list[tuple] = []
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -115,77 +118,79 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지는 전부 중복 — 수집 종료", page)
                 break
 
-            have_filter = bool(sw2_ids)
             for item in new_items:
-                pid = item.store_product_id
-                seen_ids.add(pid)
-                in_sw2 = pid in sw2_ids
-                # SW2 후보가 아니면 그냥 switch1 (필터가 동작한 경우만 태깅)
-                if have_filter and not in_sw2:
-                    item.extracted_data["platform_generation"] = "switch1"
-                want_gallery = enriched < config.NINTENDO_GALLERY_MAX
-                # SW2 후보(세대 확정 필요) 또는 갤러리 대상이면 상세를 본다
-                if in_sw2 or want_gallery:
-                    self._enrich_detail(item, in_sw2=in_sw2, want_gallery=want_gallery)
-                if want_gallery:
-                    enriched += 1
-                self.save_item(item, raw_doc_id)
+                seen_ids.add(item.store_product_id)
+                collected.append((item, raw_doc_id))
 
-            logger.info("[nintendo] %d페이지: 상품 %d개 처리", page, len(new_items))
+            logger.info("[nintendo] %d페이지: 상품 %d개 수집", page, len(new_items))
+
+        if not collected:
+            return
+
+        have_filter = bool(sw2_ids)
+        # 갤러리 보강 대상: 할인율 상위 NINTENDO_GALLERY_MAX개 (피드에 뜨는 것과 일치)
+        by_disc = sorted(
+            collected, key=lambda t: t[0].discount_percent or 0, reverse=True
+        )
+        gallery_ids = {
+            item.store_product_id
+            for item, _ in by_disc[: config.NINTENDO_GALLERY_MAX]
+        }
+
+        for item, raw_doc_id in collected:
+            pid = item.store_product_id
+            # 세대: SW2 필터 소속이면 switch2, 아니면 switch1 (필터가 동작한 경우만).
+            # ※ 닌텐도 KR 스토어는 크로스젠을 SW1/SW2 '별도 상품'으로 올려 상품별 '대상 본체'엔
+            #    항상 한 기종만 표기된다(진단 확인: SW2 상품 81/81 = 'Nintendo Switch 2' 단일).
+            #    따라서 상세 파싱 없이 필터 소속만으로 세대를 확정한다.
+            if have_filter:
+                item.extracted_data["platform_generation"] = "switch2" if pid in sw2_ids else "switch1"
+            if pid in gallery_ids:
+                self._enrich_detail(item)  # 갤러리(스크린샷)만 보강
+            self.save_item(item, raw_doc_id)
+
+        logger.info(
+            "[nintendo] 총 %d개 저장 (갤러리 대상 상위 %d개)",
+            len(collected), len(gallery_ids),
+        )
 
     # -----------------------------------------------------------------
     # 상세 스크린샷 갤러리 보강
     # -----------------------------------------------------------------
 
-    def _enrich_detail(self, item, in_sw2: bool, want_gallery: bool) -> None:
-        """상세 페이지 1회 로드로 세대(대상 본체)와 갤러리(스크린샷)를 함께 채운다.
+    def _enrich_detail(self, item) -> None:
+        """갤러리(스크린샷) 보강 — 상세 페이지 서버 HTML의 x-magento-init에서 추출.
 
-        - in_sw2: SW2 후보 → 상세의 '대상 본체'로 both/switch2 확정 (매 실행 재확인)
-        - want_gallery: 갤러리 보강 대상 → 이미 갤러리(2장+) 있으면 상세 재로드 없이 재사용
-        - 상세가 필요 없으면(둘 다 아님) 요청하지 않는다. 실패해도 수집은 안 깨진다.
+        이미 갤러리(2장+)가 있으면 상세를 다시 받지 않고 재사용한다(신규분에만 비용).
+        실패해도 수집은 안 깨진다.
         """
         pid = item.store_product_id
+        if not item.store_url:
+            return
 
-        # 갤러리 재사용 가능 여부 확인 (있으면 상세 재로드 없이 씀)
-        reusable_gallery = None
-        if want_gallery:
-            try:
-                g = repository.get_item_gallery("nintendo", config.STORE_REGION, pid)
-            except Exception:
-                g = None
-            if g and len(g) > 1:
-                reusable_gallery = g
+        # 이미 채워진 갤러리 재사용
+        try:
+            g = repository.get_item_gallery("nintendo", config.STORE_REGION, pid)
+        except Exception:
+            g = None
+        if g and len(g) > 1:
+            item.extracted_data["gallery"] = g
+            return
 
-        # 상세가 필요한 경우: 세대 확정(SW2 후보) 또는 갤러리 신규 필요.
-        # 세대는 렌더링 DOM(.label_platform), 갤러리는 서버 HTML(x-magento-init)에 있어
-        # 한 번의 로드로 둘 다 받는다.
-        need_detail = in_sw2 or (want_gallery and reusable_gallery is None)
-        server_html = rendered_html = None
-        if need_detail and item.store_url:
-            server_html, rendered_html = self._fetch_detail_pair(item.store_url)
-            if server_html:
-                # 원본은 서버 HTML로 저장 (갤러리 재처리용)
-                self.save_raw(
-                    FetchResult(item.store_url, 200, server_html.encode("utf-8"), {"x-fetched-via": "playwright-raw"}),
-                    document_type="detail",
-                    filename=f"detail-{pid}.html",
-                    store_product_id=pid,
-                    content_type="text/html",
-                )
-
-        # 세대: SW2 후보는 렌더링 DOM의 '대상 본체'로 both/switch2 판별 (실패 시 최소 switch2)
-        if in_sw2:
-            gen = parse_detail_generation(rendered_html) if rendered_html else None
-            item.extracted_data["platform_generation"] = gen or "switch2"
-
-        # 갤러리: 서버 HTML에서 추출 (재사용 가능하면 그대로)
-        if want_gallery:
-            if reusable_gallery is not None:
-                item.extracted_data["gallery"] = reusable_gallery
-            elif server_html:
-                shots = parse_detail_gallery(server_html)
-                if shots:
-                    item.extracted_data["gallery"] = shots  # [대표, 스크린샷...]
+        server_html = self._fetch_detail_server(item.store_url)
+        if not server_html:
+            return
+        # 원본(서버 HTML) 저장 — 갤러리 재처리용
+        self.save_raw(
+            FetchResult(item.store_url, 200, server_html.encode("utf-8"), {"x-fetched-via": "playwright-raw"}),
+            document_type="detail",
+            filename=f"detail-{pid}.html",
+            store_product_id=pid,
+            content_type="text/html",
+        )
+        shots = parse_detail_gallery(server_html)
+        if shots:
+            item.extracted_data["gallery"] = shots  # [대표, 스크린샷...]
 
     # -----------------------------------------------------------------
     # Switch 1 / Switch 2 세대 구분
@@ -310,36 +315,28 @@ class NintendoCollector(BaseCollector):
             self.record_parse_error(url, f"브라우저 수집 실패: {exc}")
             return None
 
-    def _fetch_detail_pair(self, url: str) -> tuple[str | None, str | None]:
-        """상세 페이지 1회 로드로 (서버 HTML, 렌더링 DOM) 둘 다 얻는다.
+    def _fetch_detail_server(self, url: str) -> str | None:
+        """상세 페이지의 '서버 응답 HTML'을 얻는다 (갤러리 x-magento-init이 여기에만 있음).
 
-        - 서버 HTML(response.text): 갤러리 데이터(x-magento-init)가 여기에만 있음
-        - 렌더링 DOM(page.content): '대상 본체'(.label_platform)가 JS로 그려져 여기에만 있음
+        갤러리만 필요하므로 렌더링 DOM 대기 없이 서버 본문만 받는다(빠름).
         """
         from common import robots
         from common.http_client import polite_wait
 
         if not robots.is_allowed(url):
             self.record_parse_error(url, "robots.txt 규칙상 금지된 주소")
-            return None, None
+            return None
         try:
             page = self._ensure_page()
             polite_wait()
             response = page.goto(url, wait_until="domcontentloaded", timeout=60_000)
             try:
-                server = response.text() if response else None
+                return response.text() if response else page.content()
             except Exception:
-                server = None
-            # 대상 본체(세대) 표기가 렌더될 때까지 잠깐 대기 (없으면 타임아웃 후 진행)
-            try:
-                page.wait_for_selector(".label_platform .attribute-item-val", timeout=8_000)
-            except Exception:
-                pass
-            rendered = page.content()
-            return server, rendered
+                return page.content()
         except Exception:
             logger.exception("[nintendo] 상세 로드 실패: %s", url)
-            return None, None
+            return None
 
     def _close_browser(self) -> None:
         for closer in (
