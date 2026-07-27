@@ -84,6 +84,7 @@ class PlaystationCollector(BaseCollector):
         self._enrich_end_dates(saved)
 
     def _collect_category(self, category_id: str, seen_ids: set[str], saved: list) -> None:
+        no_new_streak = 0  # 신규 상품 0건인 페이지가 연속으로 나온 횟수
         for page in range(1, MAX_CATEGORY_PAGES + 1):
             url = f"{BASE}/ko-kr/category/{category_id}/{page}"
             result = fetch(url)
@@ -107,11 +108,8 @@ class PlaystationCollector(BaseCollector):
                 break
 
             items = parse_products_from_next_data(next_data)
-            # 페이지에 상품이 아예 없어야 카테고리 끝 (여기서만 break).
-            # 카테고리끼리 상품이 겹쳐 new_items가 비어도, 다음 페이지엔
-            # 새 상품이 있을 수 있으므로 break 하지 않고 계속 넘긴다.
             if not items:
-                break
+                break  # 상품이 아예 없으면 카테고리 끝
 
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             for item in new_items:
@@ -123,6 +121,17 @@ class PlaystationCollector(BaseCollector):
                 "[playstation] 카테고리 %s %d페이지: 상품 %d개 (신규 %d)",
                 category_id[:8], page, len(items), len(new_items),
             )
+
+            # 카테고리끼리 상품이 크게 겹쳐, 신규가 0건인 페이지가 연속 2번이면
+            # 이 카테고리는 사실상 소진된 것으로 보고 조기 종료한다(크롤 시간 대폭 단축).
+            if not new_items:
+                no_new_streak += 1
+                if no_new_streak >= 2:
+                    logger.info("[playstation] 카테고리 %s 연속 %d페이지 신규 없음 — 조기 종료",
+                                category_id[:8], no_new_streak)
+                    break
+            else:
+                no_new_streak = 0
 
     def _enrich_end_dates(self, saved: list) -> None:
         """할인율 상위 N개 상품의 상세 페이지에서 할인 종료일을 받아 최신 스냅샷에 덧입힌다.
