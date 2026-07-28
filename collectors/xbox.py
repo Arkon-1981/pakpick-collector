@@ -83,21 +83,31 @@ class XboxCollector(BaseCollector):
             )
         logger.info("[xbox] 할인 상품 ID %d개 확보", len(product_ids))
 
-        # 20개씩 묶어서 상세 조회
-        for i in range(0, len(product_ids), CATALOG_BATCH):
-            batch = product_ids[i : i + CATALOG_BATCH]
-            self._fetch_catalog_batch(batch, batch_index=i // CATALOG_BATCH)
+        # 신작/출시예정/무료 표시를 상세 조회 **전에** 확보한다.
+        # 예전에는 상세를 다 받은 뒤 이 목록을 훑으면서 '이미 받은 건 건너뛰기'를 했는데,
+        # 엑스박스 목록 API가 할인만 주는 게 아니어서 신작·무료가 거의 다 이미 받은
+        # 상품이었다 → 전부 건너뛰어져 content_kind 가 하나도 안 붙었다
+        # (실측: new 50/50, free 50/50 이 중복 처리되어 신작·무료 탭이 비었다).
+        kinds = self._fetch_release_kinds()
 
-        # 할인 외: 신작 / 출시예정 (실패해도 할인 수집분은 보존)
-        self._collect_releases(skip=set(product_ids))
+        # 목록에 없던 신작·무료만 뒤에 붙여, 상품 하나당 상세 조회는 한 번만 한다
+        known = set(product_ids)
+        all_ids = product_ids + [i for i in kinds if i not in known]
+        if len(all_ids) > len(product_ids):
+            logger.info("[xbox] 신작·무료 목록에서 %d개 추가", len(all_ids) - len(product_ids))
 
-    def _collect_releases(self, *, skip: set[str]) -> None:
-        """microsoft.com 스토어의 신작·출시예정 목록을 수집한다.
+        for i in range(0, len(all_ids), CATALOG_BATCH):
+            batch = all_ids[i : i + CATALOG_BATCH]
+            self._fetch_catalog_batch(batch, batch_index=i // CATALOG_BATCH, kinds=kinds)
 
-        페이지 HTML의 내장 JSON에서 productId를 뽑아 displaycatalog로 상세를 받는다.
-        출시일(OriginalReleaseDate)은 파서가 extracted_data.release_date 로 저장하므로
-        웹에서 신작/출시예정 판별에 그대로 쓸 수 있다.
+    def _fetch_release_kinds(self) -> dict[str, str]:
+        """microsoft.com 스토어의 신작·출시예정·무료 목록에서 {상품ID: 종류}를 만든다.
+
+        상세는 받지 않는다 — 여기서는 '무엇이 신작인가'만 알아내고, 실제 상세 조회는
+        할인 목록과 합쳐 한 번에 처리한다(같은 상품을 두 번 받지 않기 위해).
+        먼저 나온 종류를 유지한다(출시예정 → 신작 → 무료 순).
         """
+        kinds: dict[str, str] = {}
         for kind, url in RELEASE_PAGES:
             try:
                 result = fetch(url)
@@ -114,20 +124,15 @@ class XboxCollector(BaseCollector):
             )
             self.pages_found += 1
 
-            found = PRODUCT_ID_ANY_CASE_RE.findall(result.text)
-            # displaycatalog는 대문자 BigId 를 쓴다. 할인에서 이미 받은 건 건너뛴다.
-            ids = [i.upper() for i in dict.fromkeys(found)]
-            ids = [i for i in ids if i not in skip]
-            logger.info("[xbox] %s 상품 ID %d개 (중복 제외)", kind, len(ids))
-            if not ids:
-                continue
-
-            for i in range(0, len(ids), CATALOG_BATCH):
-                self._fetch_catalog_batch(
-                    ids[i : i + CATALOG_BATCH],
-                    batch_index=i // CATALOG_BATCH,
-                    content_kind=kind,
-                )
+            # displaycatalog는 대문자 BigId를 쓰는데 스토어 페이지는 소문자로 준다
+            found = [i.upper() for i in dict.fromkeys(PRODUCT_ID_ANY_CASE_RE.findall(result.text))]
+            added = 0
+            for pid in found:
+                if pid not in kinds:
+                    kinds[pid] = kind
+                    added += 1
+            logger.info("[xbox] %s 상품 ID %d개 (신규 %d)", kind, len(found), added)
+        return kinds
 
     # =================================================================
     # 1단계: 할인 상품 ID 목록 — 여러 경로를 순서대로 시도
@@ -254,8 +259,13 @@ class XboxCollector(BaseCollector):
     # =================================================================
 
     def _fetch_catalog_batch(
-        self, big_ids: list[str], *, batch_index: int, content_kind: str | None = None
+        self, big_ids: list[str], *, batch_index: int, kinds: dict[str, str] | None = None
     ) -> None:
+        """상품 ID 묶음의 상세를 받아 저장한다.
+
+        kinds: {상품ID: "new"|"upcoming"|"free"}. 배치 안에 종류가 섞일 수 있어
+        배치 단위가 아니라 상품 단위로 붙인다.
+        """
         url = CATALOG_URL.format(ids=",".join(big_ids))
         result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
 
@@ -263,10 +273,9 @@ class XboxCollector(BaseCollector):
             self.record_parse_error(url, f"카탈로그 API 상태코드 {result.status_code}")
             return
 
-        prefix = f"{content_kind}-" if content_kind else ""
         raw_doc_id = self.save_raw(
             result, document_type="detail",
-            filename=f"catalog-{prefix}batch{batch_index}.json",
+            filename=f"catalog-batch{batch_index}.json",
             content_type="application/json",
         )
 
@@ -277,6 +286,7 @@ class XboxCollector(BaseCollector):
             return
 
         for item in parse_catalog_products(data):
-            if content_kind:
-                item.extracted_data["content_kind"] = content_kind
+            kind = (kinds or {}).get(item.store_product_id)
+            if kind:
+                item.extracted_data["content_kind"] = kind
             self.save_item(item, raw_doc_id)
