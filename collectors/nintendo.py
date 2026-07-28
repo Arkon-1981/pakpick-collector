@@ -29,6 +29,8 @@ logger = get_logger(__name__)
 LIST_URL = "https://store.nintendo.co.kr/digital/sale?p={page}"
 # 발매 일정(신작·발매예정) — 스토어와 달리 봇 차단이 없어 일반 HTTP로 받는다
 SCHEDULE_URL = "https://www.nintendo.com/kr/schedule"
+# 무료 게임 목록 (스토어라 봇 차단 가능 → 필요시 브라우저)
+FREE_URL = "https://store.nintendo.co.kr/digital/diigital-free"
 MAX_PAGES = 200  # 무한 루프 방지용 안전장치
 
 # 닌텐도 스토어 할인 목록의 Switch 2 플랫폼 필터(Amasty Shop By). label_platform=4679.
@@ -59,6 +61,7 @@ class NintendoCollector(BaseCollector):
             # 브라우저가 필요한 할인 목록보다 먼저 수집해 실패 위험을 줄인다.
             self._collect_schedule()
             self._collect_pages()
+            self._collect_free()
         finally:
             self._close_browser()
 
@@ -98,6 +101,33 @@ class NintendoCollector(BaseCollector):
                         len(items), new_cnt, up_cnt)
         except Exception:
             logger.exception("[nintendo] 발매 일정 수집 실패")
+
+    def _collect_free(self) -> None:
+        """무료 게임 목록. 스토어라 봇 차단이 있어 필요시 브라우저 경로를 탄다."""
+        try:
+            result = self._get_page(FREE_URL)
+            if result is None or result.status_code != 200:
+                # 일반 요청이 막히면 브라우저로 한 번 더
+                if not self._use_browser:
+                    self._use_browser = True
+                    result = self._get_page(FREE_URL)
+            if result is None or result.status_code != 200:
+                self.record_parse_error(FREE_URL, "무료 목록 접근 실패")
+                return
+
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="free.html",
+                content_type="text/html",
+            )
+            self.pages_found += 1
+
+            items = parse_list_page(result.text)
+            for item in items:
+                item.extracted_data["content_kind"] = "free"
+                self.save_item(item, raw_doc_id)
+            logger.info("[nintendo] 무료 게임 %d개 저장", len(items))
+        except Exception:
+            logger.exception("[nintendo] 무료 게임 수집 실패")
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()

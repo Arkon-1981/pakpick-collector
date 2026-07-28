@@ -42,6 +42,7 @@ MAX_CATEGORIES = 30       # 한 번에 수집할 최대 프로모션 수
 RELEASE_CATEGORIES = [
     ("new", "e1699f77-77e1-43ca-a296-26d08abacb0f"),       # 신규 발매
     ("upcoming", "3bf499d7-7acf-4931-97dd-2667494ee2c9"),  # 출시 예정
+    ("free", "4dfd67ab-4ed7-40b0-a937-a549aece13d0"),      # 무료 게임
 ]
 RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
 

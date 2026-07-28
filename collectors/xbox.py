@@ -52,6 +52,7 @@ DEALS_PAGES = [
 RELEASE_PAGES = [
     ("upcoming", "https://www.microsoft.com/ko-kr/store/coming-soon/games/xbox"),
     ("new", "https://www.microsoft.com/ko-kr/store/new/games/xbox"),
+    ("free", "https://www.microsoft.com/ko-kr/store/top-free/games/xbox"),
 ]
 
 # ----- 2단계 -----

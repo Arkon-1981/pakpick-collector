@@ -42,6 +42,13 @@ FREE_URL = (
     "?query&start=0&count=50&specials=1&maxprice=free"
     "&cc=kr&l=koreana&infinite=1"
 )
+# 상시 무료(F2P) 인기작 — category1=998(게임) + maxprice=free. 장르 페이지는
+# 상품 마크업이 없어(data-ds-appid 0개) 검색 API를 쓴다.
+F2P_URL = (
+    "https://store.steampowered.com/search/results/"
+    "?query&start=0&count=50&category1=998&maxprice=free"
+    "&filter=globaltopsellers&cc=kr&l=koreana&infinite=1"
+)
 # 상세(스크린샷) API — 갤러리 보강용
 APPDETAILS_URL = (
     "https://store.steampowered.com/api/appdetails"
@@ -134,27 +141,32 @@ class SteamCollector(BaseCollector):
             logger.info("[steam] %s(%s) %d개 저장", section, kind, len(parsed))
 
     def _collect_free(self) -> None:
-        """100% 할인(기간 한정 무료 배포) 상품. 상시 무료(F2P)와는 구분된다."""
-        try:
-            result = fetch(FREE_URL, extra_headers={"Accept": "application/json"})
-            if result.status_code != 200:
-                self.record_parse_error(FREE_URL, f"무료 검색 상태코드 {result.status_code}")
-                return
-            raw_doc_id = self.save_raw(
-                result, document_type="list", filename="free.json",
-                content_type="application/json",
-            )
-            self.pages_found += 1
-            data = json.loads(result.text)
-        except Exception as exc:
-            logger.warning("[steam] 무료 수집 실패: %s", exc)
-            return
+        """무료 게임 2종: 100% 할인(기간 한정 배포)과 상시 무료(F2P)."""
+        for label, url, filename, f2p in (
+            ("무료 배포(100% 할인)", FREE_URL, "free.json", False),
+            ("상시 무료(F2P)", F2P_URL, "f2p.json", True),
+        ):
+            try:
+                result = fetch(url, extra_headers={"Accept": "application/json"})
+                if result.status_code != 200:
+                    self.record_parse_error(url, f"무료 검색 상태코드 {result.status_code}")
+                    continue
+                raw_doc_id = self.save_raw(
+                    result, document_type="list", filename=filename,
+                    content_type="application/json",
+                )
+                self.pages_found += 1
+                data = json.loads(result.text)
+            except Exception as exc:
+                logger.warning("[steam] %s 수집 실패: %s", label, exc)
+                continue
 
-        items = parse_search_results_html(data.get("results_html") or "")
-        for item in items:
-            item.extracted_data["content_kind"] = "free"
-            self.save_item(item, raw_doc_id)
-        logger.info("[steam] 무료 배포 %d개 저장", len(items))
+            items = parse_search_results_html(data.get("results_html") or "")
+            for item in items:
+                item.extracted_data["content_kind"] = "free"
+                item.extracted_data["is_f2p"] = f2p  # 상시 무료 / 기간 한정 구분
+                self.save_item(item, raw_doc_id)
+            logger.info("[steam] %s %d개 저장", label, len(items))
 
     def _ensure_gallery(self, item: ParsedItem) -> None:
         """상위 인기작에 스크린샷 갤러리를 채운다.
