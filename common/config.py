@@ -47,8 +47,9 @@ XBOX_MAX_ITEMS = int(os.environ.get("XBOX_MAX_ITEMS", "800"))
 # 스팀 할인은 수만 개라 전부 받으면 소규모 게임 노이즈 + DB 부담이 큼.
 STEAM_MAX_ITEMS = int(os.environ.get("STEAM_MAX_ITEMS", "800"))
 
-# 스팀 스크린샷 갤러리(캐러셀용)를 상위 N개까지 보강한다 (상세 API 추가 호출).
-# 이미 갤러리가 채워진 상품은 재조회하지 않으므로 신규 상품에만 비용이 든다. 0이면 끔.
+# (사용 안 함) 예전에는 스팀 갤러리를 상품당 appdetails 1회씩 불러 상위 N개만 채웠다.
+# 지금은 IStoreBrowseService/GetItems 배치(50개/회)가 스크린샷까지 같이 주므로
+# 상한 없이 전량 보강한다. 환경변수 호환을 위해 이름만 남겨 둔다.
 STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 
 # 닌텐도 스크린샷 갤러리를 '할인율 상위' N개까지 보강한다 (상품 상세 페이지 추가 로드).

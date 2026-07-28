@@ -10,17 +10,17 @@
 가격은 원화(cc=kr) 기준.
 """
 import json
+import urllib.parse
 
 from collectors.base import BaseCollector, ParsedItem
 from common import config
 from common.http_client import fetch
 from common.logging_util import get_logger
-from db import repository
 from parsers.steam import (
     count_rows,
     parse_featured_items,
-    parse_screenshots,
     parse_search_results_html,
+    parse_store_items,
 )
 
 logger = get_logger(__name__)
@@ -49,11 +49,20 @@ F2P_URL = (
     "?query&start=0&count=50&category1=998&maxprice=free"
     "&filter=globaltopsellers&cc=kr&l=koreana&infinite=1"
 )
-# 상세(스크린샷) API — 갤러리 보강용
-APPDETAILS_URL = (
-    "https://store.steampowered.com/api/appdetails"
-    "?appids={appid}&cc=kr&l=koreana&filters=screenshots"
+# 배치 보강 API — appid 50개를 한 번에 받아 출시일·할인 종료일·퍼블리셔·스크린샷·
+# 리뷰 요약·한국어 지원 여부를 모두 준다. 예전에는 상품당 appdetails를 1회씩 불러
+# 스크린샷만 받았는데(150개 = 요청 150회), 이제 3회면 같은 일을 하고 정보는 더 많다.
+GETITEMS_URL = (
+    "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json={payload}"
 )
+GETITEMS_BATCH = 50
+GETITEMS_REQUEST = {
+    "include_basic_info": True,      # 퍼블리셔·개발사·짧은 소개
+    "include_release": True,         # 출시일
+    "include_screenshots": True,     # 갤러리 (appdetails 상품별 호출 대체)
+    "include_reviews": True,         # 리뷰 요약 (평점 정렬/필터용)
+    "include_supported_languages": True,  # 한국어 지원 여부
+}
 PAGE_SIZE = 100
 
 
@@ -62,10 +71,8 @@ class SteamCollector(BaseCollector):
 
     def collect(self) -> None:
         max_items = config.STEAM_MAX_ITEMS
-        gallery_max = config.STEAM_GALLERY_MAX
         start = 0
         page_idx = 0
-        processed = 0  # 전체 순번 (상위 gallery_max개만 갤러리 보강)
         total_count = None
 
         while start < max_items:
@@ -95,11 +102,10 @@ class SteamCollector(BaseCollector):
             if rows_in_page == 0:
                 break
 
-            for item in parse_search_results_html(html):
-                if processed < gallery_max:
-                    self._ensure_gallery(item)
+            page_items = parse_search_results_html(html)
+            self._enrich(page_items)  # 페이지(100개) = 배치 2회
+            for item in page_items:
                 self.save_item(item, raw_doc_id)
-                processed += 1
 
             # 스팀이 돌려준 실제 행 수만큼 다음 페이지로 이동 (count가 무시돼도 정확히 진행)
             start += rows_in_page
@@ -136,6 +142,7 @@ class SteamCollector(BaseCollector):
         for section, kind in (("new_releases", "new"), ("coming_soon", "upcoming")):
             items = (data.get(section) or {}).get("items") or []
             parsed = parse_featured_items(items, kind)
+            self._enrich(parsed)
             for item in parsed:
                 self.save_item(item, raw_doc_id)
             logger.info("[steam] %s(%s) %d개 저장", section, kind, len(parsed))
@@ -162,49 +169,96 @@ class SteamCollector(BaseCollector):
                 continue
 
             items = parse_search_results_html(data.get("results_html") or "")
+            self._enrich(items)
             for item in items:
                 item.extracted_data["content_kind"] = "free"
                 item.extracted_data["is_f2p"] = f2p  # 상시 무료 / 기간 한정 구분
                 self.save_item(item, raw_doc_id)
             logger.info("[steam] %s %d개 저장", label, len(items))
 
-    def _ensure_gallery(self, item: ParsedItem) -> None:
-        """상위 인기작에 스크린샷 갤러리를 채운다.
+    # ------------------------------------------------------------------
+    # 배치 보강
+    # ------------------------------------------------------------------
 
-        이미 저장돼 있던 갤러리(스크린샷 포함, 2장 이상)가 있으면 그대로 재사용해
-        상세 API를 다시 부르지 않는다 → 신규 상품에만 요청 비용이 든다.
+    def _enrich(self, items: list[ParsedItem]) -> None:
+        """GetItems로 items를 제자리 보강한다 (50개씩 묶어 요청).
+
+        보강이 실패해도 목록에서 얻은 이름·가격은 그대로 저장된다 → 수집 자체는 계속.
         """
-        appid = item.store_product_id
-        try:
-            existing = repository.get_item_gallery("steam", config.STORE_REGION, appid)
-        except Exception:
-            existing = None
-        if existing and len(existing) > 1:
-            item.extracted_data["gallery"] = existing
+        if not items:
             return
+        by_id = {i.store_product_id: i for i in items if i.store_product_id.isdigit()}
+        appids = list(by_id)
+        filled = 0
 
-        url = APPDETAILS_URL.format(appid=appid)
+        for offset in range(0, len(appids), GETITEMS_BATCH):
+            chunk = appids[offset : offset + GETITEMS_BATCH]
+            info_map = self._fetch_store_items(chunk)
+            for appid, info in info_map.items():
+                item = by_id.get(appid)
+                if item is not None and self._apply_info(item, info):
+                    filled += 1
+
+        if filled:
+            logger.info("[steam] 상세 보강 %d/%d건 (요청 %d회)",
+                        filled, len(appids),
+                        (len(appids) + GETITEMS_BATCH - 1) // GETITEMS_BATCH)
+
+    def _fetch_store_items(self, appids: list[str]) -> dict[str, dict]:
+        payload = {
+            "ids": [{"appid": int(a)} for a in appids],
+            "context": {
+                "language": "koreana",
+                "country_code": config.STORE_REGION.upper(),
+                "steam_realm": 1,
+            },
+            "data_request": GETITEMS_REQUEST,
+        }
+        url = GETITEMS_URL.format(payload=urllib.parse.quote(json.dumps(payload)))
         try:
             result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
         except Exception as exc:
-            logger.warning("[steam] 갤러리 조회 실패 %s: %s", appid, exc)
-            return
+            logger.warning("[steam] GetItems 요청 실패 (%d개): %s", len(appids), exc)
+            return {}
         if result.status_code != 200:
-            return
+            logger.warning("[steam] GetItems 상태코드 %s (%d개)", result.status_code, len(appids))
+            return {}
 
+        # 원본 보존: 파서를 고쳐도 과거 응답을 재처리할 수 있게 (배치라 문서 수가 적다)
         self.save_raw(
             result, document_type="detail",
-            filename=f"appdetails-{appid}.json",
-            store_product_id=appid,
+            filename=f"getitems-{appids[0]}-{len(appids)}.json",
             content_type="application/json",
         )
         try:
-            data = json.loads(result.text)
-        except json.JSONDecodeError:
-            return
+            return parse_store_items(json.loads(result.text))
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("[steam] GetItems 응답 파싱 실패 (%d개)", len(appids))
+            return {}
 
-        shots = parse_screenshots(data, appid, limit=6)
+    @staticmethod
+    def _apply_info(item: ParsedItem, info: dict) -> bool:
+        """보강 결과를 ParsedItem에 반영한다. 값이 있는 필드만 덮어쓴다."""
+        if not info:
+            return False
+        data = item.extracted_data
+
+        # 할인 종료일은 '할인 중'일 때만 의미가 있다 (지난 할인의 잔여 값 방지)
+        if info.get("sale_end_at") and item.is_on_sale:
+            item.sale_end_at = info["sale_end_at"]
+        if not item.title and info.get("title"):
+            item.title = info["title"]
+
+        for key in ("release_date", "publishers", "developers",
+                    "short_description", "review", "korean"):
+            if key in info:
+                data[key] = info[key]
+        if info.get("is_f2p"):
+            data["is_f2p"] = True
+
+        shots = info.get("screenshots")
         if shots:
             header = item.image_url
             gallery = ([header] if header else []) + [s for s in shots if s != header]
-            item.extracted_data["gallery"] = gallery[:6]
+            data["gallery"] = gallery[:6]
+        return True

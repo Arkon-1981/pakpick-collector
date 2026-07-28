@@ -18,6 +18,26 @@ logger = get_logger(__name__)
 # 호스트별 파서 캐시 (실행당 1번만 robots.txt를 읽는다)
 _parsers: dict[str, RobotFileParser | None] = {}
 
+# ---------------------------------------------------------------------------
+# 공식 공개 Web API 예외 목록
+# ---------------------------------------------------------------------------
+# robots.txt는 본래 '검색엔진이 웹페이지를 색인하지 말라'는 규약이다. 그런데 일부
+# 업체는 API 전용 호스트에도 `Disallow: /` 를 걸어둔다(api.steampowered.com이 그렇다).
+# 그 호스트에 있는 건 색인할 페이지가 아니라 키 없이 공개된 JSON API뿐이고,
+# 스토어 화면 자체가 브라우저에서 같은 API를 호출한다.
+#
+# 그래서 '호스트 + 경로 접두사'를 정확히 적은 항목만 예외로 둔다. 와일드카드도 없고
+# 호스트 전체를 여는 것도 아니다. 요청량은 배치(50개/회)로 눌러 두었다.
+API_ALLOWLIST: tuple[tuple[str, str], ...] = (
+    # 스팀 스토어 공개 API — 출시일·할인 종료일·스크린샷 배치 조회
+    ("api.steampowered.com", "/IStoreBrowseService/"),
+)
+
+
+def _in_api_allowlist(netloc: str, path: str) -> bool:
+    host = netloc.split("@")[-1].split(":")[0].lower()
+    return any(host == h and path.startswith(p) for h, p in API_ALLOWLIST)
+
 
 def _get_parser(base: str) -> RobotFileParser | None:
     if base in _parsers:
@@ -48,6 +68,9 @@ def is_allowed(url: str) -> bool:
         return True
 
     parts = urlparse(url)
+    if _in_api_allowlist(parts.netloc, parts.path):
+        return True
+
     base = f"{parts.scheme}://{parts.netloc}"
     parser = _get_parser(base)
     if parser is None:
