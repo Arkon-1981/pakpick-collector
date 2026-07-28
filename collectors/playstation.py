@@ -53,7 +53,8 @@ RELEASE_CATEGORIES = [
 RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
 # 단품 오퍼레이션으로 보강하는 필드 — 다음 실행에서 그대로 되살릴 값들
 META_KEYS = ("release_date", "publisher", "genres", "content_rating",
-             "short_description", "players")
+             "short_description", "players", "platforms",
+             "content_type", "top_category", "store_classification")
 
 # GraphQL 카테고리 조회 — HTML(24개/요청) 대비 100개/요청이라 요청 수가 1/4.
 # 해시는 외부에서 얻어 직접 호출로 검증했지만(한 카테고리 5,906건 확인) 소니가

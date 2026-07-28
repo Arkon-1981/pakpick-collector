@@ -404,4 +404,15 @@ def parse_product_meta(data: dict) -> dict:
 
     if product.get("platforms"):
         out["platforms"] = product["platforms"]
+
+    # 게임인지 DLC/아이템인지. 무료·신작 카테고리는 목록이 Concept 만 주기 때문에
+    # (분류 정보가 아예 없다) 이 단품 조회가 유일한 판별 수단이다.
+    # 이게 없으면 '무료 게임' 목록이 무료 DLC(예: 팩 티켓)로 채워진다.
+    top = product.get("topCategory")
+    if top:
+        out["top_category"] = top                     # "GAME" | "ADDON" | ...
+        out["content_type"] = "game" if top == "GAME" else "addon"
+    klass = product.get("localizedStoreDisplayClassification")
+    if klass:
+        out["store_classification"] = klass           # "제품판" | "애드온" 등 표시용
     return out
