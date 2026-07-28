@@ -21,6 +21,7 @@ from common.logging_util import get_logger
 from db import repository
 from parsers.playstation import (
     extract_next_data,
+    parse_concepts_from_next_data,
     parse_detail_end_time,
     parse_products_from_next_data,
 )
@@ -34,6 +35,15 @@ DEALS_URL = f"{BASE}/ko-kr/pages/deals"
 CATEGORY_URL_RE = re.compile(r"/ko-kr/category/([0-9a-f-]{36})")
 MAX_CATEGORY_PAGES = 100  # 카테고리당 최대 페이지 수 (안전장치)
 MAX_CATEGORIES = 30       # 한 번에 수집할 최대 프로모션 수
+
+# 신작·출시예정 카테고리 (할인과 같은 __NEXT_DATA__ 구조라 기존 파서를 그대로 쓴다).
+# 규모가 작아(수십 개) 할인 크롤보다 **먼저** 수집한다 — 할인 크롤이 시간예산을
+# 다 쓰면 뒤에 둔 단계는 영영 실행되지 않기 때문.
+RELEASE_CATEGORIES = [
+    ("new", "e1699f77-77e1-43ca-a296-26d08abacb0f"),       # 신규 발매
+    ("upcoming", "3bf499d7-7acf-4931-97dd-2667494ee2c9"),  # 출시 예정
+]
+RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
 
 
 class PlaystationCollector(BaseCollector):
@@ -54,6 +64,9 @@ class PlaystationCollector(BaseCollector):
             fetch(f"{BASE}/ko-kr")
         except Exception:
             pass  # 워밍업 실패는 무시하고 진행
+
+        # 0. 신작·출시예정 (소량) — 할인 크롤이 시간예산을 다 써도 반드시 수집되도록 먼저
+        self._collect_releases(seen_ids)
 
         # 1. deals 허브 페이지
         result = fetch(DEALS_URL)
@@ -94,6 +107,50 @@ class PlaystationCollector(BaseCollector):
         # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신.
         #    크롤이 시간예산으로 조기 종료되어도 이 단계는 반드시 실행된다.
         self._enrich_end_dates(saved)
+
+    def _collect_releases(self, seen_ids: set[str]) -> None:
+        """신작·출시예정 카테고리를 수집한다 (할인과 동일한 __NEXT_DATA__ 구조).
+
+        출시예정작은 아직 가격이 없거나 정가만 있어 is_on_sale=False 로 저장되므로
+        할인 목록에는 섞이지 않는다. content_kind 로 종류를 표시한다.
+        실패해도 이후 할인 수집은 계속되도록 예외를 흡수한다.
+        """
+        for kind, category_id in RELEASE_CATEGORIES:
+            count = 0
+            for page in range(1, RELEASE_MAX_PAGES + 1):
+                url = f"{BASE}/ko-kr/category/{category_id}/{page}"
+                try:
+                    result = fetch(url)
+                    if result.status_code != 200:
+                        break
+                    raw_doc_id = self.save_raw(
+                        result, document_type="list",
+                        filename=f"{kind}-{category_id}-p{page}.html",
+                        content_type="text/html",
+                    )
+                    self.pages_found += 1
+
+                    next_data = extract_next_data(result.text)
+                    if not next_data:
+                        break
+                    items = parse_products_from_next_data(next_data)
+                    if not items:
+                        # '신규 발매'처럼 Product가 껍데기인 카테고리는 Concept에 실제 데이터가 있다
+                        items = parse_concepts_from_next_data(next_data)
+                    if not items:
+                        break
+                    new_items = [i for i in items if i.store_product_id not in seen_ids]
+                    for item in new_items:
+                        seen_ids.add(item.store_product_id)
+                        item.extracted_data["content_kind"] = kind
+                        self.save_item(item, raw_doc_id)
+                    count += len(new_items)
+                    if not new_items:
+                        break  # 더 볼 게 없음
+                except Exception:
+                    logger.exception("[playstation] %s 카테고리 수집 실패 (page %d)", kind, page)
+                    break
+            logger.info("[playstation] %s %d개 저장", kind, count)
 
     def _collect_category(
         self, category_id: str, seen_ids: set[str], saved: list, deadline: float

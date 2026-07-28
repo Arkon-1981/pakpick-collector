@@ -204,6 +204,39 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
     )
 
 
+def parse_concepts_from_next_data(next_data: dict) -> list[ParsedItem]:
+    """apolloState의 Concept 노드에서 상품을 뽑는다.
+
+    '신규 발매' 같은 일부 카테고리는 Product 노드가 껍데기({__typename,id})이고
+    실제 이름·가격·이미지는 게임 단위 엔티티인 Concept 노드에 들어 있다.
+    Concept.products[0].__ref 가 실제 Product ID를 가리키므로, 그 ID로 맞춰
+    기존 상품과 같은 식별자 체계를 유지한다.
+    """
+    apollo = (next_data.get("props") or {}).get("apolloState") or {}
+    items: list[ParsedItem] = []
+    for key, node in apollo.items():
+        if not isinstance(node, dict):
+            continue
+        if not (key.startswith("Concept:") or node.get("__typename") == "Concept"):
+            continue
+        try:
+            refs = node.get("products") or []
+            ref = refs[0].get("__ref") if refs and isinstance(refs[0], dict) else None
+            if not ref:
+                continue
+            # "Product:JP0101-PPSA34474_00-PROBBSPIRITS2026:ko-kr" → 가운데 ID만
+            parts = ref.split(":")
+            product_id = parts[1] if len(parts) >= 2 else None
+            if not product_id:
+                continue
+            item = _product_from_node(ref, {**node, "id": product_id}, apollo)
+            if item and item.title:
+                items.append(item)
+        except Exception:
+            logger.exception("PS Concept 노드 파싱 실패: %s", key)
+    return items
+
+
 def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
     items: list[ParsedItem] = []
 
@@ -213,6 +246,10 @@ def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
             if not isinstance(node, dict):
                 continue
             if key.startswith("Product:") or node.get("__typename") == "Product":
+                # 껍데기 참조 노드({__typename,id}만 있는 것)는 건너뛴다.
+                # 이런 카테고리는 실제 데이터가 Concept 노드에 있다.
+                if node.get("name") is None and node.get("price") is None:
+                    continue
                 try:
                     item = _product_from_node(key, node, apollo)
                     if item:
@@ -229,7 +266,12 @@ def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
 
     def walk(obj):
         if isinstance(obj, dict):
-            if obj.get("__typename") == "Product" and obj.get("id"):
+            if (
+                obj.get("__typename") == "Product"
+                and obj.get("id")
+                # 껍데기 참조 노드는 제외 (실제 데이터는 Concept 노드에 있음)
+                and not (obj.get("name") is None and obj.get("price") is None)
+            ):
                 try:
                     item = _product_from_node(f"Product:{obj['id']}", obj, {})
                     if item:
