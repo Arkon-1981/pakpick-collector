@@ -249,3 +249,70 @@ def parse_detail_gallery(html: str, limit: int = 6) -> list[str]:
             if urls:
                 return urls
     return []
+
+
+# ---------------------------------------------------------------------------
+# 발매 일정(nintendo.com/kr/schedule) — 신작·발매예정
+# ---------------------------------------------------------------------------
+# 스토어(store.nintendo.co.kr)는 봇 차단(202)이라 브라우저가 필요하지만, 발매 일정
+# 페이지는 일반 HTTP로 받을 수 있고 본문에 상품 JSON이 그대로 박혀 있다.
+# 레코드 예:
+#   {"releaseDate":"2026-07-02T00:00:00.000Z","title":"Rain World",
+#    "nsuid":"70010000075084","hardware":"switch","publisher":"Akupara Games",
+#    "link":"https://store.nintendo.co.kr/70010000075084","imageHero":{"url":"..."}}
+# nsuid 는 스토어 URL 경로와 같은 값이라 기존 상품 ID 체계와 그대로 맞는다.
+_SCHEDULE_ITEM_RE = re.compile(
+    r'"releaseDate":"(?P<date>[^"]+)"'
+    r'.{0,400}?"title":"(?P<title>[^"]+)"'
+    r',"nsuid":"(?P<nsuid>\d+)"'
+    r'.{0,1200}?"hardware":"(?P<hardware>[^"]*)"',
+    re.S,
+)
+_IMAGE_ORG_RE = re.compile(r'"imageHeroOrg":\{"url":"([^"]+)"')
+
+
+def parse_schedule_page(html: str) -> list[ParsedItem]:
+    """발매 일정 페이지에서 신작·발매예정 상품을 뽑는다.
+
+    가격 정보는 없는 페이지라 가격은 비워 두고(is_on_sale=False) 출시일·세대만 채운다.
+    → 할인 목록에는 섞이지 않고, 웹에서 출시일 기준으로 신작/발매예정을 가른다.
+    """
+    text = html.replace('\\"', '"')  # RSC 스트림이 따옴표를 이스케이프해 둔다
+    items: list[ParsedItem] = []
+    seen: set[str] = set()
+
+    for m in _SCHEDULE_ITEM_RE.finditer(text):
+        nsuid = m.group("nsuid")
+        if nsuid in seen:
+            continue
+        seen.add(nsuid)
+
+        title = m.group("title").strip()
+        if not title:
+            continue
+
+        hardware = (m.group("hardware") or "").strip().lower()
+        gen = "switch2" if "switch2" in hardware or "2" in hardware else "switch1"
+
+        # 레코드 구간 안에서 대표 이미지 찾기 (없으면 생략)
+        seg = text[m.start() : m.end() + 600]
+        img = _IMAGE_ORG_RE.search(seg)
+        image_url = img.group(1).split("?")[0] if img else None
+
+        items.append(
+            ParsedItem(
+                store_product_id=nsuid,
+                title=title,
+                store_url=f"https://store.nintendo.co.kr/{nsuid}",
+                image_url=image_url,
+                is_on_sale=False,
+                extracted_data={
+                    "nsuid": nsuid,
+                    "release_date": m.group("date"),
+                    "platform_generation": gen,
+                    "hardware": hardware,
+                    "gallery": [image_url] if image_url else [],
+                },
+            )
+        )
+    return items

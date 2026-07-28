@@ -15,16 +15,20 @@
   3. 상품 타일에서 정보 추출 → DB 저장
   4. 상품이 더 안 나오면 종료
 """
+from datetime import datetime, timezone
+
 from collectors.base import BaseCollector
 from common import config
 from common.http_client import FetchResult, fetch
 from common.logging_util import get_logger
 from db import repository
-from parsers.nintendo import parse_detail_gallery, parse_list_page
+from parsers.nintendo import parse_detail_gallery, parse_list_page, parse_schedule_page
 
 logger = get_logger(__name__)
 
 LIST_URL = "https://store.nintendo.co.kr/digital/sale?p={page}"
+# 발매 일정(신작·발매예정) — 스토어와 달리 봇 차단이 없어 일반 HTTP로 받는다
+SCHEDULE_URL = "https://www.nintendo.com/kr/schedule"
 MAX_PAGES = 200  # 무한 루프 방지용 안전장치
 
 # 닌텐도 스토어 할인 목록의 Switch 2 플랫폼 필터(Amasty Shop By). label_platform=4679.
@@ -51,9 +55,49 @@ class NintendoCollector(BaseCollector):
 
     def collect(self) -> None:
         try:
+            # 발매 일정(신작·발매예정)은 일반 HTTP로 받을 수 있어 가볍고 빠르다.
+            # 브라우저가 필요한 할인 목록보다 먼저 수집해 실패 위험을 줄인다.
+            self._collect_schedule()
             self._collect_pages()
         finally:
             self._close_browser()
+
+    def _collect_schedule(self) -> None:
+        """발매 일정 페이지에서 신작·발매예정을 수집한다 (가격 없음, 출시일·세대만).
+
+        스토어와 달리 봇 차단이 없어 일반 HTTP로 받는다. nsuid가 스토어 상품 ID와
+        같은 값이라 기존 상품과 자연스럽게 합쳐진다.
+        """
+        try:
+            result = fetch(SCHEDULE_URL)
+            if result.status_code != 200:
+                self.record_parse_error(SCHEDULE_URL, f"발매 일정 상태코드 {result.status_code}")
+                return
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="schedule.html",
+                content_type="text/html",
+            )
+            self.pages_found += 1
+
+            items = parse_schedule_page(result.text)
+            now = datetime.now(timezone.utc)
+            new_cnt = up_cnt = 0
+            for item in items:
+                raw = item.extracted_data.get("release_date")
+                kind = "new"
+                try:
+                    if raw and datetime.fromisoformat(raw.replace("Z", "+00:00")) > now:
+                        kind = "upcoming"
+                except ValueError:
+                    pass
+                item.extracted_data["content_kind"] = kind
+                new_cnt += kind == "new"
+                up_cnt += kind == "upcoming"
+                self.save_item(item, raw_doc_id)
+            logger.info("[nintendo] 발매 일정 %d개 저장 (신작 %d / 발매예정 %d)",
+                        len(items), new_cnt, up_cnt)
+        except Exception:
+            logger.exception("[nintendo] 발매 일정 수집 실패")
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
