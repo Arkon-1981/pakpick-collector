@@ -24,6 +24,8 @@ from db import repository
 from parsers.playstation import (
     extract_next_data,
     graphql_total_count,
+    parse_cta_price,
+    parse_product_meta,
     parse_products_from_graphql,
     parse_concepts_from_next_data,
     parse_detail_end_time,
@@ -49,6 +51,9 @@ RELEASE_CATEGORIES = [
     ("free", "4dfd67ab-4ed7-40b0-a937-a549aece13d0"),      # 무료 게임
 ]
 RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
+# 단품 오퍼레이션으로 보강하는 필드 — 다음 실행에서 그대로 되살릴 값들
+META_KEYS = ("release_date", "publisher", "genres", "content_rating",
+             "short_description", "players")
 
 # GraphQL 카테고리 조회 — HTML(24개/요청) 대비 100개/요청이라 요청 수가 1/4.
 # 해시는 외부에서 얻어 직접 호출로 검증했지만(한 카테고리 5,906건 확인) 소니가
@@ -58,12 +63,25 @@ GQL_HASH = "9845afc0dbaab4965f6563fffc703f588c8e76792000e8610843b8d3ee9c4c09"
 GQL_PAGE_SIZE = 100
 GQL_MAX_PAGES = 60  # 카테고리당 최대 6,000개 (무한 루프 방지)
 
+# 단품 조회 오퍼레이션 — 상세 HTML(1건 400KB) 대신 쓴다.
+# 종료일만 필요할 땐 CTA 쪽이 2.7KB라 약 150배 가볍다(실측). 둘 다 직접 호출 검증함.
+GQL_CTA_OP = "productRetrieveForCtasWithPrice"
+GQL_CTA_HASH = "8532da7eda369efdad054ca8f885394a2d0c22d03c5259a422ae2bb3b98c5c99"
+GQL_META_OP = "metGetProductById"
+GQL_META_HASH = "a128042177bd93dd831164103d53b73ef790d56f51dae647064cb8f9d9fc9d1a"
+
 
 class PlaystationCollector(BaseCollector):
     platform = "playstation"
 
+    # collect()에서 실제 값으로 설정된다 (단위 테스트/부분 호출 시의 기본값)
+    _gql_ok = _cta_ok = _meta_ok = True
+    _job_deadline = float("inf")
+
     def collect(self) -> None:
-        self._gql_ok = True  # GraphQL 사용 가능 여부 (실패 시 HTML 폴백)
+        self._gql_ok = True   # 카테고리 그리드 GraphQL (실패 시 HTML 폴백)
+        self._cta_ok = True   # 종료일 CTA 오퍼레이션 (실패 시 상세 HTML 폴백)
+        self._meta_ok = True  # 출시일·퍼블리셔 오퍼레이션 (실패 시 보강 생략)
         seen_ids: set[str] = set()
         # 이미 '저장된' 상품들(종료일 보강 후보). 저장은 페이지 단위로 즉시 하고,
         # 종료일 보강은 목록 크롤이 끝난 뒤 할인율 상위 N개만 상세로 덧입힌다.
@@ -72,6 +90,9 @@ class PlaystationCollector(BaseCollector):
         # 목록 크롤 시간예산. 이 시각을 넘기면 남은 카테고리/페이지를 건너뛰고
         # 종료일 보강 단계로 넘어간다(잡 타임아웃 전에 보강이 반드시 실행되도록).
         crawl_deadline = time.monotonic() + config.PS_CRAWL_BUDGET_SECONDS
+        # 보강 단계까지 포함한 잡 전체 상한 — 넘기면 남은 보강을 접고 정상 종료한다
+        # (Actions 잡 타임아웃에 걸려 실행이 통째로 취소되는 것보다 낫다)
+        self._job_deadline = time.monotonic() + config.PS_TOTAL_BUDGET_SECONDS
 
         # 워밍업: 사람처럼 첫 화면부터 방문 (쿠키 획득 → 차단 확률 감소)
         try:
@@ -143,7 +164,19 @@ class PlaystationCollector(BaseCollector):
         출시예정작은 아직 가격이 없거나 정가만 있어 is_on_sale=False 로 저장되므로
         할인 목록에는 섞이지 않는다. content_kind 로 종류를 표시한다.
         실패해도 이후 할인 수집은 계속되도록 예외를 흡수한다.
+
+        목록엔 출시일이 없어서 여기서 단품 오퍼레이션으로 보강한다. 이미 보강해 둔
+        상품은 DB에서 한 번에 읽어와 재요청 없이 값을 유지한다.
         """
+        try:
+            cached_meta = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION, list(META_KEYS)
+            )
+        except Exception:
+            logger.exception("[playstation] 기존 메타 조회 실패 — 보강만 새로 수행")
+            cached_meta = {}
+        meta_fetched = 0
+
         for kind, category_id in RELEASE_CATEGORIES:
             count = 0
             for page in range(1, RELEASE_MAX_PAGES + 1):
@@ -169,6 +202,7 @@ class PlaystationCollector(BaseCollector):
                     if not items:
                         break
                     new_items = [i for i in items if i.store_product_id not in seen_ids]
+                    meta_fetched += self._enrich_release_meta(new_items, cached_meta)
                     for item in new_items:
                         seen_ids.add(item.store_product_id)
                         item.extracted_data["content_kind"] = kind
@@ -180,6 +214,9 @@ class PlaystationCollector(BaseCollector):
                     logger.exception("[playstation] %s 카테고리 수집 실패 (page %d)", kind, page)
                     break
             logger.info("[playstation] %s %d개 저장", kind, count)
+
+        logger.info("[playstation] 출시일·퍼블리셔 보강 — 신규 조회 %d건 (기보유 %d건은 재사용)",
+                    meta_fetched, len(cached_meta))
 
     def _collect_category_gql(
         self, category_id: str, seen_ids: set[str], saved: list, deadline: float
@@ -323,12 +360,15 @@ class PlaystationCollector(BaseCollector):
         targets.sort(key=lambda it: it.discount_percent or 0, reverse=True)
 
         done = 0
+        stopped = False
         for item in targets[:limit]:
+            if time.monotonic() >= self._job_deadline:
+                stopped = True
+                break
             try:
-                res = fetch(item.store_url)
-                if res.status_code != 200:
-                    continue
-                end_at = parse_detail_end_time(res.text, item.final_price)
+                end_at = self._end_date_via_gql(item)
+                if end_at is None and not self._cta_ok:
+                    end_at = self._end_date_via_html(item)
                 if end_at and repository.update_latest_sale_end(
                     self.platform, config.STORE_REGION, item.store_product_id, end_at
                 ):
@@ -337,4 +377,86 @@ class PlaystationCollector(BaseCollector):
                 # 요청상한/네트워크/파싱 실패는 무시 — 상품은 이미 저장됨
                 logger.exception("[playstation] 종료일 보강 실패: %s", item.store_product_id)
                 continue
-        logger.info("[playstation] 할인 종료일 보강 %d건 (대상 상위 %d)", done, min(limit, len(targets)))
+        logger.info("[playstation] 할인 종료일 보강 %d건 (대상 상위 %d, 경로 %s%s)",
+                    done, min(limit, len(targets)),
+                    "GraphQL" if self._cta_ok else "HTML",
+                    ", 시간상한으로 조기 종료" if stopped else "")
+
+    def _end_date_via_gql(self, item) -> str | None:
+        """CTA 오퍼레이션으로 할인 종료일을 받는다 (상세 HTML의 1/150 크기).
+
+        오퍼레이션이 무효화되면(소니 스키마 변경) 이 실행 내내 HTML 경로로 내려간다.
+        """
+        if not self._cta_ok:
+            return None
+        data = self._gql_product(GQL_CTA_OP, GQL_CTA_HASH, item.store_product_id)
+        if data is None:
+            self._cta_ok = False
+            logger.warning("[playstation] CTA 오퍼레이션 사용 불가 — 상세 HTML 경로로 전환")
+            return None
+        info = parse_cta_price(data, item.final_price)
+        return info.get("sale_end_at") if info else None
+
+    def _end_date_via_html(self, item) -> str | None:
+        """예비 경로: 상품 상세 HTML에서 종료일을 뽑는다 (무겁지만 검증된 경로)."""
+        if not item.store_url:
+            return None
+        res = fetch(item.store_url)
+        if res.status_code != 200:
+            return None
+        return parse_detail_end_time(res.text, item.final_price)
+
+    def _gql_product(self, op: str, sha256: str, product_id: str) -> dict | None:
+        """단품 GraphQL 오퍼레이션 1회 호출. 실패하면 None (호출부가 폴백 판단)."""
+        variables = json.dumps({"productId": product_id}, separators=(",", ":"))
+        extensions = json.dumps(
+            {"persistedQuery": {"version": 1, "sha256Hash": sha256}}, separators=(",", ":")
+        )
+        url = (
+            f"{GQL_URL}?operationName={op}"
+            f"&variables={quote(variables)}&extensions={quote(extensions)}"
+        )
+        try:
+            res = fetch(url, api=True, extra_headers={
+                "content-type": "application/json",     # 없으면 CSRF 방어에 막혀 400
+                "x-psn-store-locale-override": "ko-kr",
+            })
+            if res.status_code != 200:
+                return None
+            data = json.loads(res.text)
+        except Exception:
+            logger.exception("[playstation] %s 호출 실패: %s", op, product_id)
+            return None
+        return None if data.get("errors") else data
+
+    def _enrich_release_meta(self, items: list, cached: dict) -> int:
+        """신작·출시예정 상품에 출시일·퍼블리셔·장르를 채운다.
+
+        목록(카테고리 그리드)에는 출시일이 아예 없어서, PS만 '신작/출시예정' 탭에서
+        D-day 배지도 출시일 정렬도 못 하는 상태였다.
+
+        upsert_store_item 은 current_data 를 통째로 덮어쓰므로, 이미 채워 둔 상품은
+        DB 값(cached)을 그대로 다시 실어 준다 → 재요청 없이 값이 유지된다.
+        새로 나타난 상품만 요청하므로 실행마다 드는 비용은 '신규분'뿐이다.
+        """
+        budget = config.PS_RELEASE_META_MAX
+        fetched = 0
+        for item in items:
+            have = cached.get(item.store_product_id)
+            if have:
+                item.extracted_data.update(have)   # 기존 값 보존 (요청 0회)
+                continue
+            if fetched >= budget or not self._meta_ok:
+                continue
+            if time.monotonic() >= self._job_deadline:
+                continue
+            data = self._gql_product(GQL_META_OP, GQL_META_HASH, item.store_product_id)
+            if data is None:
+                self._meta_ok = False
+                logger.warning("[playstation] 메타 오퍼레이션 사용 불가 — 출시일 보강 중단")
+                continue
+            meta = parse_product_meta(data)
+            fetched += 1
+            if meta:
+                item.extracted_data.update(meta)
+        return fetched

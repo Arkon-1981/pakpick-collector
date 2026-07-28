@@ -313,3 +313,95 @@ def parse_products_from_graphql(data: dict) -> list[ParsedItem]:
 def graphql_total_count(data: dict) -> int | None:
     grid = ((data.get("data") or {}).get("categoryGridRetrieve")) or {}
     return (grid.get("pageInfo") or {}).get("totalCount")
+
+
+# ---------------------------------------------------------------------------
+# GraphQL 단품 조회 파서 (상세 HTML 대체)
+# ---------------------------------------------------------------------------
+# 상세 HTML은 1건에 400KB인데, 같은 정보를 주는 공개 GraphQL 오퍼레이션이 있다.
+#   productRetrieveForCtasWithPrice  → 2.7KB  (할인 종료일)
+#   metGetProductById                → 16KB   (출시일·퍼블리셔·장르·등급)
+# 실측 기준 종료일 조회 기준 약 150배 가벼워, 같은 시간예산에서 훨씬 많이 훑을 수 있다.
+
+
+def parse_cta_price(data: dict, target_discounted: float | None = None) -> dict | None:
+    """productRetrieveForCtasWithPrice 응답에서 가격/할인 종료일을 뽑는다.
+
+    webctas에는 일반 구매가와 PS Plus 전용가가 함께 오고, 종료일이 서로 다르다.
+    target_discounted(목록에서 본 할인가)와 같은 값을 가진 CTA를 우선 고르고,
+    없으면 '일반 구매 가능(APPLICABLE)' CTA를, 그것도 없으면 첫 CTA를 쓴다.
+    """
+    product = (data.get("data") or {}).get("productRetrieve") or {}
+    ctas = [c for c in (product.get("webctas") or []) if isinstance(c, dict) and c.get("price")]
+    if not ctas:
+        return None
+
+    chosen = None
+    if target_discounted is not None:
+        tgt = int(round(target_discounted))
+        chosen = next(
+            (c for c in ctas if c["price"].get("discountedValue") == tgt), None
+        )
+    if chosen is None:
+        chosen = next(
+            (c for c in ctas if c["price"].get("applicability") == "APPLICABLE"), ctas[0]
+        )
+
+    price = chosen["price"]
+    return {
+        "sale_end_at": _parse_epoch_ms(price.get("endTime")),
+        "base_price": price.get("basePriceValue"),
+        "discounted_price": price.get("discountedValue"),
+        "discount_text": price.get("discountText"),
+        # PS Plus 가입자만 받는 할인인지 (일반 이용자 체감가와 다르다)
+        "plus_only": price.get("applicability") == "UPSELL"
+        or bool(price.get("isTiedToSubscription")),
+        "cta_type": chosen.get("type"),
+    }
+
+
+def parse_product_meta(data: dict) -> dict:
+    """metGetProductById 응답에서 출시일·퍼블리셔·장르·등급 등을 뽑는다.
+
+    값이 없는 항목은 넣지 않는다 → 호출부에서 기존 값을 덮어쓰지 않게.
+    Product에 비어 있는 값은 게임 단위 엔티티인 concept 쪽을 한 번 더 본다.
+    """
+    product = (data.get("data") or {}).get("productRetrieve") or {}
+    if not product:
+        return {}
+    concept = product.get("concept") or {}
+
+    def pick(key):
+        return product.get(key) or concept.get(key)
+
+    out: dict = {}
+    if pick("releaseDate"):
+        out["release_date"] = pick("releaseDate")
+    if pick("publisherName"):
+        out["publisher"] = pick("publisherName")
+
+    # 소니가 장르/서브장르를 합쳐서 주다 보니 같은 값이 두 번 오는 경우가 있다 → 순서 유지 중복 제거
+    genres = list(dict.fromkeys(
+        g["value"] for g in (pick("combinedLocalizedGenres") or [])
+        if isinstance(g, dict) and g.get("value")
+    ))
+    if genres:
+        out["genres"] = genres
+
+    rating = product.get("contentRating") or {}
+    if rating.get("description"):
+        out["content_rating"] = rating["description"]  # 예: "GRAC 15+"
+
+    for desc in (pick("descriptions") or []):
+        if isinstance(desc, dict) and desc.get("type") == "SHORT" and desc.get("value"):
+            out["short_description"] = desc["value"]
+            break
+
+    for notice in (pick("compatibilityNotices") or []):
+        if isinstance(notice, dict) and notice.get("type") == "NO_OF_PLAYERS":
+            out["players"] = notice.get("value")
+            break
+
+    if product.get("platforms"):
+        out["platforms"] = product["platforms"]
+    return out

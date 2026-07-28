@@ -281,6 +281,45 @@ def find_item_id(platform: str, store_region: str, store_product_id: str) -> int
     return res.data[0]["id"] if res.data else None
 
 
+def fetch_item_meta(platform: str, store_region: str, keys: list[str]) -> dict[str, dict]:
+    """저장된 상품들의 current_data 중 지정한 키만 뽑아 {상품ID: {키: 값}} 으로 돌려준다.
+
+    upsert_store_item 은 current_data 를 통째로 덮어쓴다. 그래서 한 번 보강해 둔
+    값(출시일·퍼블리셔 등)을 다음 실행에서 유지하려면, 저장 직전에 기존 값을 다시
+    실어 줘야 한다. 상품마다 조회하면 요청이 수백 번 나가므로 한 번에 받아 온다.
+
+    current_data 통째로가 아니라 필요한 키만 골라 받는다(PS는 노드 원본을 통째로
+    보관해서 행 하나가 수십 KB다 → 키만 뽑으면 수백 배 가볍다).
+    """
+    if not keys:
+        return {}
+    # `->>` 가 아니라 `->` 를 쓴다: `->>` 는 무조건 문자열로 바꿔 버려서
+    # 배열(genres, platforms)이 '["액션"]' 같은 문자열로 되돌아온다.
+    select = "store_product_id," + ",".join(f"{k}:current_data->{k}" for k in keys)
+    out: dict[str, dict] = {}
+    page = 1000
+    for offset in range(0, 20000, page):
+        res = (
+            get_client()
+            .table("store_items")
+            .select(select)
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .order("id")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        rows = res.data or []
+        for row in rows:
+            pid = row.get("store_product_id")
+            values = {k: row[k] for k in keys if row.get(k) is not None}
+            if pid and values:
+                out[pid] = values
+        if len(rows) < page:
+            break
+    return out
+
+
 def touch_last_seen(item_id: int) -> None:
     """last_seen_at 만 갱신한다 (상품 정보는 건드리지 않음)."""
     get_client().table("store_items").update(

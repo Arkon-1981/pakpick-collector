@@ -58,9 +58,14 @@ STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 # 느리지만, 이미 갤러리가 채워진 상품은 재조회하지 않아 신규분에만 비용이 든다. 0이면 끔.
 NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "150"))
 
-# PS 할인 종료일(endTime)은 목록 페이지엔 없고 상품 상세 페이지에만 있다.
-# 할인율 상위 N개만 상세를 추가로 받아 종료일을 보강한다(봇 차단 없어 일반 HTTP, 빠름). 0이면 끔.
-PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "60"))
+# PS 할인 종료일(endTime)은 목록에 없고 단품 조회로만 얻는다.
+# 상세 HTML(1건 400KB) 대신 CTA GraphQL(1건 2.7KB)을 쓰게 되면서 같은 시간에
+# 훨씬 많이 훑을 수 있어 60 → 300으로 올렸다. 0이면 끔.
+PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "300"))
+
+# PS 신작·출시예정 상품의 출시일·퍼블리셔를 한 실행에서 새로 조회할 최대 건수.
+# 한 번 채운 상품은 DB에서 읽어 재사용하므로 실제 비용은 '새로 등장한 상품'뿐이다.
+PS_RELEASE_META_MAX = int(os.environ.get("PS_RELEASE_META_MAX", "150"))
 
 # PS 목록 크롤에 쓸 최대 시간(초). 이 시간이 지나면 남은 카테고리/페이지를 건너뛰고
 # 곧바로 '할인 종료일 보강' 단계로 넘어간다. PS 목록은 카테고리×페이지가 많아 정중한
@@ -71,6 +76,12 @@ PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "60"))
 # 짧아진 만큼 매 실행 시작 카테고리를 회전시켜(collectors/playstation.py) 여러 실행에
 # 걸쳐 전체 카테고리를 훑는다.
 PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "2700"))
+
+# PS 잡 전체 시간 상한(초). 목록 크롤이 끝난 뒤의 보강 단계까지 포함한 총량이다.
+# 보강은 상품당 1요청이라 상한(PS_DETAIL_END_MAX 등)을 올리면 시간이 길어지는데,
+# 여기서 잘라 주지 않으면 Actions 잡 타임아웃(120분)에 걸려 실행이 통째로 '취소'로
+# 남는다. 100분에서 멈추면 그때까지 보강한 내용은 정상 저장되고 실행도 성공 처리된다.
+PS_TOTAL_BUDGET_SECONDS = int(os.environ.get("PS_TOTAL_BUDGET_SECONDS", "6000"))
 
 STORE_REGION = "KR"
 
