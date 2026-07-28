@@ -181,6 +181,9 @@ class BaseCollector:
                 is_available=item.is_available,
                 price_data=item.extracted_data.get("price_raw", {}),
             )
+            # 저장에 성공한 뒤에만 집계한다 (실패한 상품이 '확인됨'으로 세지면 안 된다)
+            self.items_seen.add(item_id)
+            self._count_fields(item)
             self.products_found += 1
         except Exception as exc:
             self.errors_count += 1
