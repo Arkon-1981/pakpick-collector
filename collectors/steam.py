@@ -70,7 +70,7 @@ class SteamCollector(BaseCollector):
 
         while start < max_items:
             url = SEARCH_URL.format(start=start, count=PAGE_SIZE)
-            result = fetch(url, extra_headers={"Accept": "application/json"})
+            result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
             if result.status_code != 200:
                 self.record_parse_error(url, f"검색 API 상태코드 {result.status_code}")
                 break
@@ -119,7 +119,7 @@ class SteamCollector(BaseCollector):
     def _collect_featured(self) -> None:
         """신작(new_releases)·출시예정(coming_soon)을 featuredcategories에서 가져온다."""
         try:
-            result = fetch(FEATURED_URL, extra_headers={"Accept": "application/json"})
+            result = fetch(FEATURED_URL, extra_headers={"Accept": "application/json"}, api=True)
             if result.status_code != 200:
                 self.record_parse_error(FEATURED_URL, f"featured API 상태코드 {result.status_code}")
                 return
@@ -147,7 +147,7 @@ class SteamCollector(BaseCollector):
             ("상시 무료(F2P)", F2P_URL, "f2p.json", True),
         ):
             try:
-                result = fetch(url, extra_headers={"Accept": "application/json"})
+                result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
                 if result.status_code != 200:
                     self.record_parse_error(url, f"무료 검색 상태코드 {result.status_code}")
                     continue
@@ -185,7 +185,7 @@ class SteamCollector(BaseCollector):
 
         url = APPDETAILS_URL.format(appid=appid)
         try:
-            result = fetch(url, extra_headers={"Accept": "application/json"})
+            result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
         except Exception as exc:
             logger.warning("[steam] 갤러리 조회 실패 %s: %s", appid, exc)
             return

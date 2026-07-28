@@ -11,8 +11,10 @@ HTML 셀렉터 파싱보다 이 JSON을 읽는 것이 훨씬 안정적이다.
   2. deals 페이지에 연결된 카테고리(프로모션) 목록 URL 수집
   3. 각 카테고리의 페이지들을 순서대로 요청 → 원본 저장 → 상품 추출
 """
+import json
 import re
 import time
+from urllib.parse import quote
 
 from collectors.base import BaseCollector
 from common import config
@@ -21,6 +23,8 @@ from common.logging_util import get_logger
 from db import repository
 from parsers.playstation import (
     extract_next_data,
+    graphql_total_count,
+    parse_products_from_graphql,
     parse_concepts_from_next_data,
     parse_detail_end_time,
     parse_products_from_next_data,
@@ -46,11 +50,20 @@ RELEASE_CATEGORIES = [
 ]
 RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
 
+# GraphQL 카테고리 조회 — HTML(24개/요청) 대비 100개/요청이라 요청 수가 1/4.
+# 해시는 외부에서 얻어 직접 호출로 검증했지만(한 카테고리 5,906건 확인) 소니가
+# 스키마를 바꾸면 무효가 될 수 있어, 실패 시 기존 HTML 경로로 폴백한다.
+GQL_URL = "https://web.np.playstation.com/api/graphql/v1/op"
+GQL_HASH = "9845afc0dbaab4965f6563fffc703f588c8e76792000e8610843b8d3ee9c4c09"
+GQL_PAGE_SIZE = 100
+GQL_MAX_PAGES = 60  # 카테고리당 최대 6,000개 (무한 루프 방지)
+
 
 class PlaystationCollector(BaseCollector):
     platform = "playstation"
 
     def collect(self) -> None:
+        self._gql_ok = True  # GraphQL 사용 가능 여부 (실패 시 HTML 폴백)
         seen_ids: set[str] = set()
         # 이미 '저장된' 상품들(종료일 보강 후보). 저장은 페이지 단위로 즉시 하고,
         # 종료일 보강은 목록 크롤이 끝난 뒤 할인율 상위 N개만 상세로 덧입힌다.
@@ -112,6 +125,12 @@ class PlaystationCollector(BaseCollector):
                     config.PS_CRAWL_BUDGET_SECONDS // 60,
                 )
                 break
+            if self._gql_ok:
+                if self._collect_category_gql(category_id, seen_ids, saved, crawl_deadline):
+                    continue
+                # 한 번 실패하면 이 실행 내내 검증된 HTML 경로를 쓴다
+                self._gql_ok = False
+                logger.warning('[playstation] GraphQL 사용 불가 — HTML 경로로 전환')
             self._collect_category(category_id, seen_ids, saved, crawl_deadline)
 
         # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신.
@@ -161,6 +180,77 @@ class PlaystationCollector(BaseCollector):
                     logger.exception("[playstation] %s 카테고리 수집 실패 (page %d)", kind, page)
                     break
             logger.info("[playstation] %s %d개 저장", kind, count)
+
+    def _collect_category_gql(
+        self, category_id: str, seen_ids: set[str], saved: list, deadline: float
+    ) -> bool:
+        """GraphQL로 카테고리를 훑는다. 성공하면 True.
+
+        HTML 페이지는 24개씩 주지만 이쪽은 100개씩 준다(실측). 요청 수가 1/4이라
+        같은 시간예산으로 훨씬 넓게 덮는다.
+
+        주의: persistedQuery 해시는 소니가 스키마를 바꾸면 무효가 될 수 있다(외부에서
+        얻은 값이라 수명을 보장 못 함). 그래서 실패하면 False를 돌려주고 호출부가
+        검증된 HTML 경로로 되돌아가게 한다 — 최악의 경우에도 지금 동작 그대로다.
+        """
+        offset = 0
+        got_any = False
+        for _ in range(GQL_MAX_PAGES):
+            if time.monotonic() >= deadline:
+                break
+            variables = json.dumps({
+                "id": category_id,
+                "pageArgs": {"size": GQL_PAGE_SIZE, "offset": offset},
+                "sortBy": {"name": "productReleaseDate", "isAscending": False},
+                "filterBy": [], "facetOptions": [],
+            }, separators=(",", ":"))
+            extensions = json.dumps({
+                "persistedQuery": {"version": 1, "sha256Hash": GQL_HASH}
+            }, separators=(",", ":"))
+            url = (
+                f"{GQL_URL}?operationName=categoryGridRetrieve"
+                f"&variables={quote(variables)}&extensions={quote(extensions)}"
+            )
+            try:
+                result = fetch(url, api=True, extra_headers={
+                    # 이 헤더가 없으면 CSRF 방어에 막혀 400이 난다 (실측)
+                    "content-type": "application/json",
+                    "x-psn-store-locale-override": "ko-kr",
+                })
+                if result.status_code != 200:
+                    return got_any
+                data = json.loads(result.text)
+                if data.get("errors"):
+                    return got_any
+                items = parse_products_from_graphql(data)
+                total = graphql_total_count(data)
+            except Exception:
+                logger.exception("[playstation] GraphQL 실패 %s", category_id[:8])
+                return got_any
+
+            if not items:
+                return got_any
+            got_any = True
+
+            raw_doc_id = self.save_raw(
+                result, document_type="list",
+                filename=f"gql-{category_id}-o{offset}.json",
+                content_type="application/json",
+            )
+            self.pages_found += 1
+
+            new_items = [i for i in items if i.store_product_id not in seen_ids]
+            for item in new_items:
+                seen_ids.add(item.store_product_id)
+                self.save_item(item, raw_doc_id)
+                saved.append(item)
+            logger.info("[playstation] GQL %s offset %d: %d개 (신규 %d/전체 %s)",
+                        category_id[:8], offset, len(items), len(new_items), total)
+
+            offset += len(items)
+            if total is not None and offset >= total:
+                break
+        return got_any
 
     def _collect_category(
         self, category_id: str, seen_ids: set[str], saved: list, deadline: float

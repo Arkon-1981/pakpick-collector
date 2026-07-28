@@ -136,7 +136,7 @@ class NintendoCollector(BaseCollector):
             batch = ids[i : i + PRICE_API_BATCH]
             try:
                 result = fetch(PRICE_API_URL.format(ids=",".join(batch)),
-                               extra_headers={"Accept": "application/json"})
+                               extra_headers={"Accept": "application/json"}, api=True)
                 if result.status_code != 200:
                     logger.warning("[nintendo] 가격 API 상태코드 %s", result.status_code)
                     continue

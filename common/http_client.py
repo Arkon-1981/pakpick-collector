@@ -83,10 +83,14 @@ _consecutive_blocks = 0
 BLOCK_STATUS_CODES = (202, 403, 429)
 
 
-def polite_wait() -> None:
-    """사람 같은 간격으로 대기: 기본값 기준 6~12초 사이 무작위."""
+def polite_wait(api: bool = False) -> None:
+    """요청 간 대기. HTML 스크래핑은 사람 속도(6~12초), 공식 API는 짧게(1.5~3초).
+
+    api=True 는 스팀 검색 API·Xbox displaycatalog·닌텐도 가격 API처럼 프로그램
+    호출용으로 공개된 엔드포인트에만 쓴다. 스토어 HTML 페이지에는 쓰지 않는다.
+    """
     global _last_request_at
-    base = config.REQUEST_DELAY_SECONDS
+    base = config.API_REQUEST_DELAY_SECONDS if api else config.REQUEST_DELAY_SECONDS
     delay = base + random.uniform(0, base)  # base ~ 2*base 초
     elapsed = time.monotonic() - _last_request_at
     if elapsed < delay:
@@ -123,8 +127,13 @@ def fetch(
     extra_headers: dict | None = None,
     timeout: int = 30,
     check_robots: bool = True,
+    api: bool = False,
 ) -> FetchResult:
-    """URL 하나를 가져온다. 안전장치(간격·robots·상한·차단감지)가 자동 적용된다."""
+    """URL 하나를 가져온다. 안전장치(간격·robots·상한·차단감지)가 자동 적용된다.
+
+    api=True 면 공식 JSON API용 짧은 간격(1.5~3초)을 쓴다. HTML 스토어 페이지에는
+    쓰지 말 것 — 그쪽은 사람 속도(6~12초)를 유지해야 한다.
+    """
     if check_robots:
         from common import robots
 
@@ -133,7 +142,7 @@ def fetch(
 
     for attempt in range(1, MAX_RETRIES + 1):
         _check_budget()
-        polite_wait()
+        polite_wait(api)
 
         headers = dict(extra_headers) if extra_headers else {}
         try:

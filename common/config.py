@@ -23,6 +23,13 @@ RAW_BUCKET = os.environ.get("RAW_BUCKET", "raw-store-data")
 # 사람이 페이지를 넘겨 보는 속도(기본 6~12초)가 된다.
 REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "6.0"))
 
+# 공식 JSON API 호출에 쓰는 간격(초). 실제 대기는 이 값~2배 (기본 1.5~3초).
+# 사람 흉내가 필요한 건 HTML 스토어 페이지를 훑을 때다. 스팀 검색 API, Xbox
+# displaycatalog, 닌텐도 가격 API 처럼 **프로그램 호출용으로 공개된 엔드포인트**에
+# 6~12초를 기다릴 이유가 없다(측정상 이 대기가 전체 수집 시간의 43~132%를 차지했다).
+# 그래도 무간격은 피해 서버 부담과 레이트리밋을 함께 배려한다.
+API_REQUEST_DELAY_SECONDS = float(os.environ.get("API_REQUEST_DELAY_SECONDS", "1.5"))
+
 # robots.txt(사이트의 로봇 출입 규칙) 준수 여부 — 기본 켜짐
 RESPECT_ROBOTS = os.environ.get("RESPECT_ROBOTS", "true").lower() != "false"
 

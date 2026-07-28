@@ -257,7 +257,7 @@ class XboxCollector(BaseCollector):
         self, big_ids: list[str], *, batch_index: int, content_kind: str | None = None
     ) -> None:
         url = CATALOG_URL.format(ids=",".join(big_ids))
-        result = fetch(url, extra_headers={"Accept": "application/json"})
+        result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
 
         if result.status_code != 200:
             self.record_parse_error(url, f"카탈로그 API 상태코드 {result.status_code}")

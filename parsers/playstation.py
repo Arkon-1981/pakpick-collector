@@ -286,3 +286,30 @@ def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
 
     walk(next_data)
     return found
+
+
+# ---------------------------------------------------------------------------
+# GraphQL 카테고리 조회 (web.np.playstation.com/api/graphql)
+# ---------------------------------------------------------------------------
+# HTML 페이지는 한 번에 24개만 주지만 이 엔드포인트는 100개를 준다(실측: 한 카테고리
+# totalCount 5,906 / 요청당 100개 / 할인가·할인율 포함). 요청 수가 1/4로 줄어 같은
+# 시간예산에 훨씬 넓은 카탈로그를 덮는다.
+# 상품 노드 구조가 apolloState 의 Product 와 같아서 기존 변환기를 그대로 재사용한다.
+def parse_products_from_graphql(data: dict) -> list[ParsedItem]:
+    grid = ((data.get("data") or {}).get("categoryGridRetrieve")) or {}
+    items: list[ParsedItem] = []
+    for p in grid.get("products") or []:
+        if not isinstance(p, dict) or not p.get("id"):
+            continue
+        try:
+            item = _product_from_node(f"Product:{p['id']}", p, {})
+            if item and item.title:
+                items.append(item)
+        except Exception:
+            logger.exception("PS GraphQL 상품 파싱 실패: %s", p.get("id"))
+    return items
+
+
+def graphql_total_count(data: dict) -> int | None:
+    grid = ((data.get("data") or {}).get("categoryGridRetrieve")) or {}
+    return (grid.get("pageInfo") or {}).get("totalCount")
