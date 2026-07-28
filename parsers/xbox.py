@@ -75,6 +75,49 @@ def _images(images: list) -> tuple[str | None, list[str]]:
     return (representative, gallery)
 
 
+def _extract_meta(product: dict, market: dict, loc: dict) -> dict:
+    """카탈로그 응답에 이미 들어 있는데 안 쓰고 있던 정보를 꺼낸다.
+
+    전부 같은 응답 안에 있어 **추가 요청이 0회**다. 지금까지는 product 원본만
+    통째로 보관해 두고 상위 키로 꺼내지 않아 웹에서 조회·정렬에 못 쓰고 있었다.
+    """
+    props = product.get("Properties") or {}
+    out: dict = {}
+
+    # 평점: 기간별로 여러 개가 오는데 표본이 가장 큰 AllTime 을 쓴다
+    for usage in market.get("UsageData") or []:
+        if usage.get("AggregateTimeSpan") == "AllTime" and usage.get("RatingCount"):
+            out["review"] = {
+                "count": usage.get("RatingCount"),
+                "average": usage.get("AverageRating"),   # 5점 만점
+            }
+            break
+
+    genres = props.get("Categories") or ([props["Category"]] if props.get("Category") else [])
+    if genres:
+        out["genres"] = list(dict.fromkeys(g for g in genres if g))
+
+    # 연령등급: 한국 등급(GRB)이 있으면 그것을, 없으면 첫 등급을 쓴다
+    ratings = market.get("ContentRatings") or []
+    korean = next((r for r in ratings if r.get("RatingSystem") == "GRB"), None)
+    chosen = korean or (ratings[0] if ratings else None)
+    if chosen and chosen.get("RatingId"):
+        out["content_rating"] = chosen["RatingId"]       # 예: "GRB:18"
+
+    # 지원 세대: ConsoleGen9 = Series X|S, ConsoleGen8 = Xbox One
+    gens = props.get("XboxConsoleGenCompatible") or []
+    if gens:
+        out["platforms"] = [
+            {"ConsoleGen9": "Xbox Series X|S", "ConsoleGen8": "Xbox One"}.get(g, g)
+            for g in gens
+        ]
+    if props.get("XboxLiveGoldRequired") is not None:
+        out["gold_required"] = bool(props["XboxLiveGoldRequired"])
+    if loc.get("Franchises"):
+        out["franchises"] = loc["Franchises"]
+    return out
+
+
 def _extract_price(product: dict) -> dict:
     """SKU/Availability 목록에서 실제 판매 가격을 찾는다.
 
@@ -154,6 +197,7 @@ def parse_catalog_products(data: dict) -> list[ParsedItem]:
             "publisher": loc.get("PublisherName"),
             "short_description": loc.get("ShortDescription"),
             "gallery": gallery,
+            **_extract_meta(product, market, loc),
         }
 
         items.append(

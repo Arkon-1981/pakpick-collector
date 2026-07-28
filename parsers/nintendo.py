@@ -299,6 +299,15 @@ def parse_schedule_page(html: str) -> list[ParsedItem]:
         img = _IMAGE_ORG_RE.search(seg)
         image_url = img.group(1).split("?")[0] if img else None
 
+        extracted = {
+            "nsuid": nsuid,
+            "release_date": m.group("date"),
+            "platform_generation": gen,
+            "hardware": hardware,
+            "gallery": [image_url] if image_url else [],
+        }
+        extracted.update(_schedule_extras(seg))
+
         items.append(
             ParsedItem(
                 store_product_id=nsuid,
@@ -306,16 +315,37 @@ def parse_schedule_page(html: str) -> list[ParsedItem]:
                 store_url=f"https://store.nintendo.co.kr/{nsuid}",
                 image_url=image_url,
                 is_on_sale=False,
-                extracted_data={
-                    "nsuid": nsuid,
-                    "release_date": m.group("date"),
-                    "platform_generation": gen,
-                    "hardware": hardware,
-                    "gallery": [image_url] if image_url else [],
-                },
+                extracted_data=extracted,
             )
         )
     return items
+
+
+# 같은 레코드 안에 이미 들어 있는데 그동안 버리고 있던 값들 (추가 요청 0회).
+# 닌텐도는 상품 상세를 브라우저로만 열 수 있어(봇 차단) 이 정보를 따로 받으려면
+# 상품당 Playwright 로드가 필요하다 — 목록에서 같이 주워 두면 그 비용이 통째로 사라진다.
+_SCHED_PUBLISHER_RE = re.compile(r'"publisher":"([^"]+)"')
+_SCHED_RATING_RE = re.compile(r'"rating":(?:\{[^{}]*"name":"([^"]+)"|"([^"]+)")')
+_SCHED_CATEGORY_RE = re.compile(r'"category":\[([^\]]*)\]')
+
+
+def _schedule_extras(segment: str) -> dict:
+    """일정 레코드 구간에서 퍼블리셔·등급·판매 형태를 추가로 뽑는다."""
+    out: dict = {}
+    m = _SCHED_PUBLISHER_RE.search(segment)
+    if m:
+        out["publisher"] = m.group(1)
+    # rating 은 현재 모든 항목이 null 이다(실측 115/115). 닌텐도가 채우기 시작하면
+    # 그대로 잡히도록 남겨 둔다 — 없는 동안엔 키 자체를 넣지 않는다.
+    m = _SCHED_RATING_RE.search(segment)
+    if m:
+        out["content_rating"] = m.group(1) or m.group(2)
+    m = _SCHED_CATEGORY_RE.search(segment)
+    if m:
+        cats = re.findall(r'"([^"]+)"', m.group(1))
+        if cats:
+            out["categories"] = cats     # 예: ["다운로드 버전"], ["패키지 버전"]
+    return out
 
 
 # ---------------------------------------------------------------------------
