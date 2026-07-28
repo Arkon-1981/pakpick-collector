@@ -96,7 +96,16 @@ class PlaystationCollector(BaseCollector):
         logger.info("[playstation] 프로모션 카테고리 %d개 발견", len(category_ids))
 
         # 3. 각 카테고리를 페이지 단위로 순회 (페이지마다 즉시 저장)
-        for category_id in category_ids[:MAX_CATEGORIES]:
+        #    시간예산이 짧으면 앞쪽 카테고리만 반복해서 훑고 뒤쪽은 영영 못 보게 된다
+        #    (→ 뒤쪽 상품은 last_seen_at 이 안 갱신돼 웹에서 사라짐).
+        #    실행마다 시작 위치를 회전시켜 여러 번에 걸쳐 전체를 covering 한다.
+        #    12시간 단위로 회전 = 하루 2회 실행에서 매번 다른 지점부터 시작.
+        targets = category_ids[:MAX_CATEGORIES]
+        if targets:
+            start = int(time.time() // (12 * 3600)) % len(targets)
+            targets = targets[start:] + targets[:start]
+            logger.info("[playstation] 카테고리 %d개 중 %d번째부터 순회 (회전)", len(targets), start)
+        for category_id in targets:
             if time.monotonic() >= crawl_deadline:
                 logger.info(
                     "[playstation] 크롤 시간예산(%d분) 소진 — 남은 카테고리 건너뛰고 종료일 보강으로",

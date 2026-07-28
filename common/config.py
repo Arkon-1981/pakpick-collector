@@ -59,8 +59,10 @@ PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "60"))
 # 간격(6~12초)으로 전부 훑으면 GitHub Actions 잡 타임아웃(120분)을 넘겨 잡이 통째로
 # 취소되고, 그러면 크롤 뒤에 실행되는 종료일 보강이 아예 못 돌던 문제가 있었다.
 # 크롤을 이 시간으로 제한해, 남은 시간(보강 상위 N개 상세 요청) 안에서 종료일 보강이
-# 반드시 실행되도록 보장한다. 기본 85분(보강·마무리에 ~35분 여유).
-PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "5100"))
+# 반드시 실행되도록 보장한다. 기본 45분 — Actions 사용 분을 아끼기 위해 85분에서 줄였고,
+# 짧아진 만큼 매 실행 시작 카테고리를 회전시켜(collectors/playstation.py) 여러 실행에
+# 걸쳐 전체 카테고리를 훑는다.
+PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "2700"))
 
 STORE_REGION = "KR"
 
