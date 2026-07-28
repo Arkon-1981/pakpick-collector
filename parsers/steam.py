@@ -124,6 +124,66 @@ def count_rows(html: str) -> int:
     return html.count('class="search_result_row')
 
 
+def parse_featured_items(items: list[dict], content_kind: str) -> list[ParsedItem]:
+    """featuredcategories API의 항목(JSON)을 ParsedItem으로 변환한다.
+
+    검색 HTML과 달리 신작(new_releases)·출시예정(coming_soon)을 JSON으로 준다.
+    가격은 최소 단위(원×100)이며, 출시예정작은 original_price=null / final_price=0 처럼
+    **가격이 아직 없는** 경우가 많아 무가격 저장을 허용한다(할인 목록엔 안 잡힘).
+
+    content_kind: "new"(최근 출시) | "upcoming"(출시 예정)
+    """
+    out: list[ParsedItem] = []
+    for it in items:
+        try:
+            appid = it.get("id")
+            name = it.get("name")
+            if not appid or not name:
+                continue
+            appid = str(appid)
+
+            # 가격: 최소 단위(원×100) → 원. 출시예정은 미정(0/null)일 수 있다.
+            def _won(v) -> float | None:
+                return float(v) / 100.0 if isinstance(v, (int, float)) and v > 0 else None
+
+            original = _won(it.get("original_price"))
+            final = _won(it.get("final_price"))
+            disc = it.get("discount_percent") or 0
+            upcoming = content_kind == "upcoming"
+            # 출시예정은 가격 미정이면 그대로 None (0원=무료로 오해되지 않게)
+            if final is None and not upcoming and original is not None:
+                final = original
+            is_on_sale = bool(it.get("discounted")) and disc > 0 and final is not None
+            if original is None and final is not None:
+                original = final
+
+            image = it.get("header_image") or it.get("large_capsule_image")
+            image = image.split("?")[0] if image else _images(appid)[0]
+
+            out.append(
+                ParsedItem(
+                    store_product_id=appid,
+                    title=name,
+                    store_url=f"https://store.steampowered.com/app/{appid}/?cc=kr",
+                    image_url=image,
+                    regular_price=original,
+                    sale_price=final if is_on_sale else None,
+                    final_price=final,
+                    discount_percent=float(disc) if is_on_sale else None,
+                    is_on_sale=is_on_sale,
+                    extracted_data={
+                        "appid": appid,
+                        "gallery": [image],
+                        "content_kind": content_kind,
+                        "price_raw": {"original": original, "final": final, "discount": disc},
+                    },
+                )
+            )
+        except Exception:
+            logger.exception("스팀 featured 항목 파싱 실패: %s", it.get("id"))
+    return out
+
+
 def parse_screenshots(data: dict, appid: str, limit: int = 5) -> list[str]:
     """appdetails(filters=screenshots) 응답에서 스크린샷 원본 URL을 뽑는다.
 

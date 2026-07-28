@@ -16,7 +16,12 @@ from common import config
 from common.http_client import fetch
 from common.logging_util import get_logger
 from db import repository
-from parsers.steam import count_rows, parse_screenshots, parse_search_results_html
+from parsers.steam import (
+    count_rows,
+    parse_featured_items,
+    parse_screenshots,
+    parse_search_results_html,
+)
 
 logger = get_logger(__name__)
 
@@ -25,6 +30,16 @@ SEARCH_URL = (
     "https://store.steampowered.com/search/results/"
     "?query&start={start}&count={count}"
     "&specials=1&filter=globaltopsellers"
+    "&cc=kr&l=koreana&infinite=1"
+)
+# 신작·출시예정 묶음 API (new_releases / coming_soon 섹션을 JSON으로 준다)
+FEATURED_URL = (
+    "https://store.steampowered.com/api/featuredcategories/?cc=kr&l=korean"
+)
+# 100% 할인(무료 배포) — 기간 한정으로 '소장 가능한 무료'. F2P(상시 무료)와 구분된다.
+FREE_URL = (
+    "https://store.steampowered.com/search/results/"
+    "?query&start=0&count=50&specials=1&maxprice=free"
     "&cc=kr&l=koreana&infinite=1"
 )
 # 상세(스크린샷) API — 갤러리 보강용
@@ -86,9 +101,60 @@ class SteamCollector(BaseCollector):
                 break
 
         logger.info(
-            "[steam] 수집 완료 — 페이지 %d개, 상품 %d개 (전체 할인 %s개)",
+            "[steam] 할인 수집 — 페이지 %d개, 상품 %d개 (전체 할인 %s개)",
             self.pages_found, self.products_found, total_count,
         )
+
+        # 할인 외 소스: 신작 / 출시예정 / 무료 배포 (실패해도 할인 수집분은 보존)
+        self._collect_featured()
+        self._collect_free()
+
+    def _collect_featured(self) -> None:
+        """신작(new_releases)·출시예정(coming_soon)을 featuredcategories에서 가져온다."""
+        try:
+            result = fetch(FEATURED_URL, extra_headers={"Accept": "application/json"})
+            if result.status_code != 200:
+                self.record_parse_error(FEATURED_URL, f"featured API 상태코드 {result.status_code}")
+                return
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="featured.json",
+                content_type="application/json",
+            )
+            self.pages_found += 1
+            data = json.loads(result.text)
+        except Exception as exc:
+            logger.warning("[steam] featured 수집 실패: %s", exc)
+            return
+
+        for section, kind in (("new_releases", "new"), ("coming_soon", "upcoming")):
+            items = (data.get(section) or {}).get("items") or []
+            parsed = parse_featured_items(items, kind)
+            for item in parsed:
+                self.save_item(item, raw_doc_id)
+            logger.info("[steam] %s(%s) %d개 저장", section, kind, len(parsed))
+
+    def _collect_free(self) -> None:
+        """100% 할인(기간 한정 무료 배포) 상품. 상시 무료(F2P)와는 구분된다."""
+        try:
+            result = fetch(FREE_URL, extra_headers={"Accept": "application/json"})
+            if result.status_code != 200:
+                self.record_parse_error(FREE_URL, f"무료 검색 상태코드 {result.status_code}")
+                return
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="free.json",
+                content_type="application/json",
+            )
+            self.pages_found += 1
+            data = json.loads(result.text)
+        except Exception as exc:
+            logger.warning("[steam] 무료 수집 실패: %s", exc)
+            return
+
+        items = parse_search_results_html(data.get("results_html") or "")
+        for item in items:
+            item.extracted_data["content_kind"] = "free"
+            self.save_item(item, raw_doc_id)
+        logger.info("[steam] 무료 배포 %d개 저장", len(items))
 
     def _ensure_gallery(self, item: ParsedItem) -> None:
         """상위 인기작에 스크린샷 갤러리를 채운다.
