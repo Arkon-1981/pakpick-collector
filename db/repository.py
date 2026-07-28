@@ -262,6 +262,46 @@ def known_product_ids(platform: str, store_region: str, limit: int = 5000) -> li
     return out
 
 
+def item_id_map(platform: str, store_region: str, limit: int = 20000) -> dict[str, int]:
+    """{상품ID: 내부 id} 전체를 한 번에 받아 온다.
+
+    find_item_id 를 상품마다 부르면 요청이 수천 번 난다(닌텐도 가격 갱신 2,000개
+    기준 2,000회). 목록으로 받으면 20여 회로 끝난다.
+    """
+    out: dict[str, int] = {}
+    page = 1000
+    for offset in range(0, limit, page):
+        res = (
+            get_client()
+            .table("store_items")
+            .select("id,store_product_id")
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .order("id")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        rows = res.data or []
+        for row in rows:
+            pid = row.get("store_product_id")
+            if pid:
+                out[pid] = row["id"]
+        if len(rows) < page:
+            break
+    return out
+
+
+def touch_last_seen_many(item_ids: list[int], chunk: int = 500) -> None:
+    """여러 상품의 last_seen_at 을 한 번에 갱신한다 (상품 정보는 건드리지 않음)."""
+    for i in range(0, len(item_ids), chunk):
+        batch = item_ids[i : i + chunk]
+        if not batch:
+            continue
+        get_client().table("store_items").update(
+            {"last_seen_at": _now()}
+        ).in_("id", batch).execute()
+
+
 def find_item_id(platform: str, store_region: str, store_product_id: str) -> int | None:
     """상품의 내부 id만 찾는다. 아무것도 수정하지 않는다.
 

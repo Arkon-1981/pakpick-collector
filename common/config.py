@@ -58,6 +58,15 @@ STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 # 느리지만, 이미 갤러리가 채워진 상품은 재조회하지 않아 신규분에만 비용이 든다. 0이면 끔.
 NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "150"))
 
+# 닌텐도 할인 목록 크롤을 한 실행에서 몇 페이지까지 볼지.
+# 예전에는 끝까지(53페이지) 훑느라 잡이 80분 걸렸다. 지금은 시세·할인 종료일을
+# 공식 가격 API로 받으므로(이미 아는 상품은 API가 전부 갱신하고 last_seen_at도 찍는다)
+# 목록 크롤에 남은 역할은 '새로 나타난 상품 발견'뿐이다.
+# 그래서 한 번에 일부만 보고, 실행마다 구간을 옮겨 며칠에 걸쳐 전체를 덮는다.
+NINTENDO_LIST_PAGES = int(os.environ.get("NINTENDO_LIST_PAGES", "12"))
+# 목록 전체 깊이(가정). 이 범위를 NINTENDO_LIST_PAGES 크기의 구간으로 나눠 회전한다.
+NINTENDO_LIST_SPAN = int(os.environ.get("NINTENDO_LIST_SPAN", "60"))
+
 # PS 할인 종료일(endTime)은 목록에 없고 단품 조회로만 얻는다.
 # 상세 HTML(1건 400KB) 대신 CTA GraphQL(1건 2.7KB)을 쓰게 되면서 같은 시간에
 # 훨씬 많이 훑을 수 있어 60 → 300으로 올렸다. 0이면 끔.
