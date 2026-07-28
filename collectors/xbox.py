@@ -46,6 +46,14 @@ DEALS_PAGES = [
     "https://www.microsoft.com/ko-kr/store/deals/games",
 ]
 
+# 신작·출시예정 — microsoft.com 스토어 페이지는 상품 목록이 내장 JSON으로 서버 렌더링돼
+# HTML만 받아도 productId를 뽑을 수 있다. (xbox.com/browse 계열은 클라이언트 렌더라 불가,
+#  emerald API는 channelKey를 무시하고 항상 같은 목록을 줘서 신작 용도로 못 쓴다.)
+RELEASE_PAGES = [
+    ("upcoming", "https://www.microsoft.com/ko-kr/store/coming-soon/games/xbox"),
+    ("new", "https://www.microsoft.com/ko-kr/store/new/games/xbox"),
+]
+
 # ----- 2단계 -----
 CATALOG_URL = (
     "https://displaycatalog.mp.microsoft.com/v7.0/products"
@@ -58,6 +66,8 @@ CATALOG_BATCH = 20     # 상세 API 한 번에 조회할 상품 수
 BIG_ID_RE = re.compile(r"\b(9[A-Z0-9]{11})\b")
 # 페이지 내장 JSON의 productId 를 정확히 집는다 (접두어 무관)
 PRODUCT_ID_RE = re.compile(r'"productId"\s*:\s*"([0-9A-Z]{12})"')
+# microsoft.com 스토어는 productId 를 소문자로 내려준다 (displaycatalog 조회 시 대문자로 변환)
+PRODUCT_ID_ANY_CASE_RE = re.compile(r'"productId"\s*:\s*"([0-9a-zA-Z]{12})"')
 
 
 class XboxCollector(BaseCollector):
@@ -76,6 +86,47 @@ class XboxCollector(BaseCollector):
         for i in range(0, len(product_ids), CATALOG_BATCH):
             batch = product_ids[i : i + CATALOG_BATCH]
             self._fetch_catalog_batch(batch, batch_index=i // CATALOG_BATCH)
+
+        # 할인 외: 신작 / 출시예정 (실패해도 할인 수집분은 보존)
+        self._collect_releases(skip=set(product_ids))
+
+    def _collect_releases(self, *, skip: set[str]) -> None:
+        """microsoft.com 스토어의 신작·출시예정 목록을 수집한다.
+
+        페이지 HTML의 내장 JSON에서 productId를 뽑아 displaycatalog로 상세를 받는다.
+        출시일(OriginalReleaseDate)은 파서가 extracted_data.release_date 로 저장하므로
+        웹에서 신작/출시예정 판별에 그대로 쓸 수 있다.
+        """
+        for kind, url in RELEASE_PAGES:
+            try:
+                result = fetch(url)
+            except Exception as exc:
+                logger.warning("[xbox] %s 페이지 접속 실패: %s", kind, exc)
+                continue
+            if result.status_code != 200:
+                self.record_parse_error(url, f"{kind} 페이지 상태코드 {result.status_code}")
+                continue
+
+            self.save_raw(
+                result, document_type="list",
+                filename=f"{kind}-games.html", content_type="text/html",
+            )
+            self.pages_found += 1
+
+            found = PRODUCT_ID_ANY_CASE_RE.findall(result.text)
+            # displaycatalog는 대문자 BigId 를 쓴다. 할인에서 이미 받은 건 건너뛴다.
+            ids = [i.upper() for i in dict.fromkeys(found)]
+            ids = [i for i in ids if i not in skip]
+            logger.info("[xbox] %s 상품 ID %d개 (중복 제외)", kind, len(ids))
+            if not ids:
+                continue
+
+            for i in range(0, len(ids), CATALOG_BATCH):
+                self._fetch_catalog_batch(
+                    ids[i : i + CATALOG_BATCH],
+                    batch_index=i // CATALOG_BATCH,
+                    content_kind=kind,
+                )
 
     # =================================================================
     # 1단계: 할인 상품 ID 목록 — 여러 경로를 순서대로 시도
@@ -201,7 +252,9 @@ class XboxCollector(BaseCollector):
     # 2단계: 상품 상세 (displaycatalog)
     # =================================================================
 
-    def _fetch_catalog_batch(self, big_ids: list[str], *, batch_index: int) -> None:
+    def _fetch_catalog_batch(
+        self, big_ids: list[str], *, batch_index: int, content_kind: str | None = None
+    ) -> None:
         url = CATALOG_URL.format(ids=",".join(big_ids))
         result = fetch(url, extra_headers={"Accept": "application/json"})
 
@@ -209,9 +262,10 @@ class XboxCollector(BaseCollector):
             self.record_parse_error(url, f"카탈로그 API 상태코드 {result.status_code}")
             return
 
+        prefix = f"{content_kind}-" if content_kind else ""
         raw_doc_id = self.save_raw(
             result, document_type="detail",
-            filename=f"catalog-batch{batch_index}.json",
+            filename=f"catalog-{prefix}batch{batch_index}.json",
             content_type="application/json",
         )
 
@@ -222,4 +276,6 @@ class XboxCollector(BaseCollector):
             return
 
         for item in parse_catalog_products(data):
+            if content_kind:
+                item.extracted_data["content_kind"] = content_kind
             self.save_item(item, raw_doc_id)
