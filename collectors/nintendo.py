@@ -80,6 +80,10 @@ FILTER_URL_TEMPLATES = [
 class NintendoCollector(BaseCollector):
     platform = "nintendo"
 
+    # 목록 타일엔 이미지가 없는 경우가 있고, 발매 일정 항목은 가격이 아직 없다.
+    # 그래서 기본값보다 느슨하게 둔다 — 정상 변동으로 실패하면 가드가 무의미해진다.
+    FIELD_FLOORS = {"title": 0.95, "image_url": 0.60, "final_price": 0.70}
+
     def __init__(self):
         super().__init__()
         self._use_browser = False   # 일반 요청이 막히면 True로 전환
@@ -480,11 +484,26 @@ class NintendoCollector(BaseCollector):
                     body = page.content()
                 return FetchResult(url, status, body.encode("utf-8"), {"x-fetched-via": "playwright-raw"})
 
-            # 목록용: 상품 타일이 그려질 때까지 최대 20초 대기 후 렌더링 DOM 사용
-            try:
-                page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
-            except Exception:
-                logger.warning("[nintendo] 브라우저에서도 상품 타일이 안 보임: %s", url)
+            # 목록용: 상품 타일이 그려질 때까지 최대 20초 대기 후 렌더링 DOM 사용.
+            # 안 보이면 한 번 더 시도한다 — 봇 차단은 일시적인 경우가 많고, 여기서
+            # 포기하면 그 페이지의 상품은 이번 실행에서 통째로 유실된다(실측: 매 실행
+            # 2~3페이지가 이렇게 빠졌다). 재시도 전에 잠깐 쉬어 부담을 낮춘다.
+            for attempt in (1, 2):
+                try:
+                    page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
+                    break
+                except Exception:
+                    if attempt == 1:
+                        logger.info("[nintendo] 타일이 안 보임 — 잠시 후 재시도: %s", url)
+                        page.wait_for_timeout(4_000)
+                        try:
+                            page.reload(wait_until="domcontentloaded", timeout=45_000)
+                        except Exception:
+                            pass
+                    else:
+                        logger.warning(
+                            "[nintendo] 재시도 후에도 상품 타일이 안 보임: %s", url
+                        )
 
             html = page.content()
             return FetchResult(url, 200, html.encode("utf-8"), {"x-fetched-via": "playwright"})

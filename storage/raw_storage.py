@@ -56,3 +56,16 @@ def upload_raw(path: str, content: bytes, *, content_type: str = "application/gz
         file_options={"content-type": content_type, "upsert": "true"},
     )
     return path
+
+
+def delete_many(paths: list[str]) -> int:
+    """Storage 파일 여러 개를 한 번에 지운다 (보존 기한 정리용).
+
+    경로 목록을 한 요청으로 넘길 수 있어, 파일마다 부르는 것보다 훨씬 가볍다.
+    지울 게 없으면 아무것도 하지 않는다.
+    """
+    if not paths:
+        return 0
+    get_client().storage.from_(config.RAW_BUCKET).remove(paths)
+    logger.info("원본 %d개 삭제", len(paths))
+    return len(paths)

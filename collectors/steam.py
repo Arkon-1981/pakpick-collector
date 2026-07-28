@@ -69,6 +69,13 @@ PAGE_SIZE = 100
 class SteamCollector(BaseCollector):
     platform = "steam"
 
+    # 스팀 할인은 스토어가 종료일을 항상 준다(실측 100%). 이게 무너지면
+    # IStoreBrowseService 스키마 변경이라는 뜻이고, 폴백 경로가 없어 조용히 빈다.
+    FIELD_FLOORS = {
+        **BaseCollector.FIELD_FLOORS,
+        "sale_end_at": 0.70,
+    }
+
     def collect(self) -> None:
         max_items = config.STEAM_MAX_ITEMS
         start = 0

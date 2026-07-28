@@ -75,6 +75,10 @@ GQL_META_HASH = "a128042177bd93dd831164103d53b73ef790d56f51dae647064cb8f9d9fc9d1
 class PlaystationCollector(BaseCollector):
     platform = "playstation"
 
+    # 출시예정작은 가격이 없는 것이 정상이고(is_on_sale=False 로 저장된다),
+    # Concept 경로로만 들어온 상품은 이미지가 비는 경우가 있다.
+    FIELD_FLOORS = {"title": 0.95, "image_url": 0.70, "final_price": 0.80}
+
     # collect()에서 실제 값으로 설정된다 (단위 테스트/부분 호출 시의 기본값)
     _gql_ok = _cta_ok = _meta_ok = True
     _job_deadline = float("inf")
