@@ -77,11 +77,13 @@ class PlaystationCollector(BaseCollector):
     # collect()에서 실제 값으로 설정된다 (단위 테스트/부분 호출 시의 기본값)
     _gql_ok = _cta_ok = _meta_ok = True
     _job_deadline = float("inf")
+    _meta_fetched = 0   # 실행 전체에서 새로 조회한 메타 건수 (상한 기준)
 
     def collect(self) -> None:
         self._gql_ok = True   # 카테고리 그리드 GraphQL (실패 시 HTML 폴백)
         self._cta_ok = True   # 종료일 CTA 오퍼레이션 (실패 시 상세 HTML 폴백)
         self._meta_ok = True  # 출시일·퍼블리셔 오퍼레이션 (실패 시 보강 생략)
+        self._meta_fetched = 0
         seen_ids: set[str] = set()
         # 이미 '저장된' 상품들(종료일 보강 후보). 저장은 페이지 단위로 즉시 하고,
         # 종료일 보강은 목록 크롤이 끝난 뒤 할인율 상위 N개만 상세로 덧입힌다.
@@ -439,14 +441,20 @@ class PlaystationCollector(BaseCollector):
         DB 값(cached)을 그대로 다시 실어 준다 → 재요청 없이 값이 유지된다.
         새로 나타난 상품만 요청하므로 실행마다 드는 비용은 '신규분'뿐이다.
         """
+        # 상한은 '실행 전체' 기준이다. 이 함수는 페이지마다 불리므로 지역 변수로 세면
+        # 페이지당 상한이 되어 사실상 무제한이 된다(실측: 상한 150인데 216건 조회됨).
         budget = config.PS_RELEASE_META_MAX
         fetched = 0
         for item in items:
             have = cached.get(item.store_product_id)
             if have:
-                item.extracted_data.update(have)   # 기존 값 보존 (요청 0회)
+                # 기존 값 되살리기는 요청이 들지 않으므로 상한과 무관하게 항상 한다
+                item.extracted_data.update(have)
                 continue
-            if fetched >= budget or not self._meta_ok:
+            # self._meta_fetched 로 세는 이유: 이 함수는 페이지마다 불린다.
+            # 지역 변수로 세면 '페이지당 상한'이 되어 사실상 무제한이 된다
+            # (실측: 상한 150인데 216건 조회됨 — 9페이지 × 24개).
+            if self._meta_fetched >= budget or not self._meta_ok:
                 continue
             if time.monotonic() >= self._job_deadline:
                 continue
@@ -457,6 +465,7 @@ class PlaystationCollector(BaseCollector):
                 continue
             meta = parse_product_meta(data)
             fetched += 1
+            self._meta_fetched += 1
             if meta:
                 item.extracted_data.update(meta)
         return fetched
