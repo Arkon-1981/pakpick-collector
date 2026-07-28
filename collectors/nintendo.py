@@ -15,17 +15,55 @@
   3. 상품 타일에서 정보 추출 → DB 저장
   4. 상품이 더 안 나오면 종료
 """
+import json
+import time
+from datetime import datetime, timezone
+
 from collectors.base import BaseCollector
 from common import config
 from common.http_client import FetchResult, fetch
 from common.logging_util import get_logger
 from db import repository
-from parsers.nintendo import parse_detail_gallery, parse_list_page
+from parsers.nintendo import (
+    parse_detail_gallery,
+    parse_list_page,
+    parse_price_api,
+    parse_schedule_page,
+)
 
 logger = get_logger(__name__)
 
 LIST_URL = "https://store.nintendo.co.kr/digital/sale?p={page}"
+# 발매 일정(신작·발매예정) — 스토어와 달리 봇 차단이 없어 일반 HTTP로 받는다
+SCHEDULE_URL = "https://www.nintendo.com/kr/schedule"
+# 무료 게임 목록 (스토어라 봇 차단 가능 → 필요시 브라우저)
+FREE_URL = "https://store.nintendo.co.kr/digital/diigital-free"
+# 공식 가격 API — NSUID 50개 배치, 봇 차단 없음, 세일 종료일까지 제공
+PRICE_API_URL = "https://api.ec.nintendo.com/v1/price?country=KR&lang=en&ids={ids}"
+PRICE_API_BATCH = 50  # API가 50개 초과 시 "Over ids limit number" 반환
 MAX_PAGES = 200  # 무한 루프 방지용 안전장치
+
+
+def _pages_this_run() -> list[int]:
+    """이번 실행에서 훑을 목록 페이지 번호들.
+
+    목록 전체(50페이지 넘음)를 매번 훑으면 브라우저 크롤이라 80분이 걸린다.
+    시세·할인 종료일은 이제 공식 가격 API가 이미 아는 상품 전부를 갱신하므로
+    (last_seen_at 도 그때 찍힌다) 목록 크롤은 '새 상품 발견'만 하면 된다.
+
+    그래서 한 실행에 NINTENDO_LIST_PAGES 페이지짜리 구간 하나만 보고,
+    12시간 단위로 구간을 옮긴다 → 며칠에 걸쳐 전체를 덮는다.
+    앞쪽만 계속 보면 뒤쪽에 새로 들어온 상품을 영영 발견하지 못한다.
+    """
+    count = max(1, config.NINTENDO_LIST_PAGES)
+    span = max(count, config.NINTENDO_LIST_SPAN)
+    blocks = max(1, span // count)
+    block = int(time.time() // (12 * 3600)) % blocks
+    start = block * count + 1
+    pages = list(range(start, min(start + count, MAX_PAGES + 1)))
+    logger.info("[nintendo] 목록 %d~%d페이지 (전체 %d페이지를 %d구간으로 회전)",
+                pages[0], pages[-1], span, blocks)
+    return pages
 
 # 닌텐도 스토어 할인 목록의 Switch 2 플랫폼 필터(Amasty Shop By). label_platform=4679.
 # 목록 타일엔 세대 표시가 없어서, SW2 필터 목록으로 'SW2에 올라온 게임'을 추린 뒤
@@ -51,9 +89,147 @@ class NintendoCollector(BaseCollector):
 
     def collect(self) -> None:
         try:
+            # 발매 일정(신작·발매예정)은 일반 HTTP로 받을 수 있어 가볍고 빠르다.
+            # 브라우저가 필요한 할인 목록보다 먼저 수집해 실패 위험을 줄인다.
+            self._collect_schedule()
             self._collect_pages()
+            self._collect_free()
+            self._refresh_prices_via_api()
         finally:
             self._close_browser()
+
+    def _collect_schedule(self) -> None:
+        """발매 일정 페이지에서 신작·발매예정을 수집한다 (가격 없음, 출시일·세대만).
+
+        스토어와 달리 봇 차단이 없어 일반 HTTP로 받는다. nsuid가 스토어 상품 ID와
+        같은 값이라 기존 상품과 자연스럽게 합쳐진다.
+        """
+        try:
+            result = fetch(SCHEDULE_URL)
+            if result.status_code != 200:
+                self.record_parse_error(SCHEDULE_URL, f"발매 일정 상태코드 {result.status_code}")
+                return
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="schedule.html",
+                content_type="text/html",
+            )
+            self.pages_found += 1
+
+            items = parse_schedule_page(result.text)
+            now = datetime.now(timezone.utc)
+            new_cnt = up_cnt = 0
+            for item in items:
+                raw = item.extracted_data.get("release_date")
+                kind = "new"
+                try:
+                    if raw and datetime.fromisoformat(raw.replace("Z", "+00:00")) > now:
+                        kind = "upcoming"
+                except ValueError:
+                    pass
+                item.extracted_data["content_kind"] = kind
+                new_cnt += kind == "new"
+                up_cnt += kind == "upcoming"
+                self.save_item(item, raw_doc_id)
+            logger.info("[nintendo] 발매 일정 %d개 저장 (신작 %d / 발매예정 %d)",
+                        len(items), new_cnt, up_cnt)
+        except Exception:
+            logger.exception("[nintendo] 발매 일정 수집 실패")
+
+    def _refresh_prices_via_api(self) -> None:
+        """공식 가격 API로 이미 아는 상품들의 시세를 갱신한다.
+
+        스토어 HTML 크롤은 봇 차단 때문에 브라우저가 필요해 느리지만, 이 API는
+        NSUID 50개를 한 번에 주고 차단도 없다. 무엇보다 **세일 종료일**을 주는데
+        HTML 목록엔 없는 정보라, 이 단계에서만 닌텐도 종료일을 채울 수 있다.
+
+        상품 자체(제목·이미지)는 이미 저장돼 있으므로 여기서는 가격 스냅샷만 남긴다.
+        """
+        # 상품ID → 내부 id 를 한 번에 받아 둔다.
+        # 예전엔 상품마다 find_item_id + touch_last_seen 을 불러서 2,000개 갱신에
+        # 요청이 4,000번 넘게 나갔다(이 단계만 34분). 목록으로 받으면 20여 회면 된다.
+        try:
+            id_map = repository.item_id_map(self.platform, config.STORE_REGION)
+        except Exception:
+            logger.exception("[nintendo] 기존 상품 ID 조회 실패")
+            return
+        ids = [i for i in id_map if i.isdigit()]
+        if not ids:
+            return
+
+        logger.info("[nintendo] 가격 API로 %d개 시세 갱신 시작", len(ids))
+        updated = ends = 0
+        seen_item_ids: list[int] = []   # last_seen_at 은 마지막에 한 번에 갱신
+        for i in range(0, len(ids), PRICE_API_BATCH):
+            batch = ids[i : i + PRICE_API_BATCH]
+            try:
+                result = fetch(PRICE_API_URL.format(ids=",".join(batch)),
+                               extra_headers={"Accept": "application/json"}, api=True)
+                if result.status_code != 200:
+                    logger.warning("[nintendo] 가격 API 상태코드 %s", result.status_code)
+                    continue
+                prices = parse_price_api(json.loads(result.text))
+            except Exception:
+                logger.exception("[nintendo] 가격 API 배치 실패 (%d~)", i)
+                continue
+
+            for nsuid, p in prices.items():
+                try:
+                    # 상품 정보(제목·이미지·content_kind)는 건드리지 않고 id만 쓴다.
+                    # upsert_store_item 을 쓰면 넘긴 값으로 통째로 덮어써 기존 정보가 지워진다.
+                    item_id = id_map.get(nsuid)
+                    if item_id is None:
+                        continue  # 아직 목록에서 못 본 상품 — 시세만 따로 만들진 않는다
+                    seen_item_ids.append(item_id)
+                    repository.insert_price_snapshot_if_changed(
+                        store_item_id=item_id,
+                        raw_document_id=None,
+                        regular_price=p["regular_price"],
+                        sale_price=p["final_price"] if p["is_on_sale"] else None,
+                        final_price=p["final_price"],
+                        discount_percent=p["discount_percent"],
+                        sale_start_at=p["sale_start_at"],
+                        sale_end_at=p["sale_end_at"],
+                        is_on_sale=p["is_on_sale"],
+                    )
+                    updated += 1
+                    if p["sale_end_at"]:
+                        ends += 1
+                except Exception:
+                    logger.exception("[nintendo] 시세 저장 실패: %s", nsuid)
+
+        # 가격 API가 응답한 상품은 스토어에 살아 있다는 뜻 → 신선도 갱신
+        try:
+            repository.touch_last_seen_many(seen_item_ids)
+        except Exception:
+            logger.exception("[nintendo] last_seen 일괄 갱신 실패")
+        logger.info("[nintendo] 가격 API 갱신 %d건 (종료일 %d건)", updated, ends)
+
+    def _collect_free(self) -> None:
+        """무료 게임 목록. 스토어라 봇 차단이 있어 필요시 브라우저 경로를 탄다."""
+        try:
+            result = self._get_page(FREE_URL)
+            if result is None or result.status_code != 200:
+                # 일반 요청이 막히면 브라우저로 한 번 더
+                if not self._use_browser:
+                    self._use_browser = True
+                    result = self._get_page(FREE_URL)
+            if result is None or result.status_code != 200:
+                self.record_parse_error(FREE_URL, "무료 목록 접근 실패")
+                return
+
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="free.html",
+                content_type="text/html",
+            )
+            self.pages_found += 1
+
+            items = parse_list_page(result.text)
+            for item in items:
+                item.extracted_data["content_kind"] = "free"
+                self.save_item(item, raw_doc_id)
+            logger.info("[nintendo] 무료 게임 %d개 저장", len(items))
+        except Exception:
+            logger.exception("[nintendo] 무료 게임 수집 실패")
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
@@ -69,7 +245,7 @@ class NintendoCollector(BaseCollector):
         except Exception:
             pass  # 워밍업 실패는 무시하고 진행
 
-        for page in range(1, MAX_PAGES + 1):
+        for idx, page in enumerate(_pages_this_run()):
             url = LIST_URL.format(page=page)
             result = self._get_page(url)
 
@@ -89,8 +265,8 @@ class NintendoCollector(BaseCollector):
 
             items = parse_list_page(result.text)
 
-            # 1페이지에서 상품이 하나도 안 나오면 → 봇 차단 가능성 → 브라우저로 재시도
-            if not items and page == 1 and not self._use_browser:
+            # 첫 페이지에서 상품이 하나도 안 나오면 → 봇 차단 가능성 → 브라우저로 재시도
+            if not items and idx == 0 and not self._use_browser:
                 logger.warning("[nintendo] 일반 요청으로는 상품이 안 보임 — 실제 브라우저로 전환")
                 self._use_browser = True
                 result = self._get_page(url)
@@ -106,11 +282,11 @@ class NintendoCollector(BaseCollector):
                 logger.info("[nintendo] %d페이지에 상품 없음 — 수집 종료", page)
                 break
 
-            # 1페이지 목록이 확보되면, SW2 필터로 'SW2 후보'를 식별한다.
+            # 첫 페이지 목록이 확보되면, SW2 필터로 'SW2 후보'를 식별한다.
             # (한 번만 실행. 실패해도 나머지 수집은 그대로 진행 → 세대 태깅만 생략)
             if sw2_ids is None:
-                page1_ids = {i.store_product_id for i in items}
-                sw2_ids = self._collect_filter_ids(SW2_LABEL, page1_ids)
+                first_page_ids = {i.store_product_id for i in items}
+                sw2_ids = self._collect_filter_ids(SW2_LABEL, first_page_ids)
 
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             if not new_items:

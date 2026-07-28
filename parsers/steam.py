@@ -18,6 +18,7 @@
    구조가 바뀌어도 원본 JSON은 항상 저장되므로 파서 수정 후 재처리 가능.
 """
 import re
+from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 
@@ -124,21 +125,174 @@ def count_rows(html: str) -> int:
     return html.count('class="search_result_row')
 
 
-def parse_screenshots(data: dict, appid: str, limit: int = 5) -> list[str]:
-    """appdetails(filters=screenshots) 응답에서 스크린샷 원본 URL을 뽑는다.
+def parse_featured_items(items: list[dict], content_kind: str) -> list[ParsedItem]:
+    """featuredcategories API의 항목(JSON)을 ParsedItem으로 변환한다.
 
-    응답 구조: { "<appid>": { "success": true,
-                 "data": { "screenshots": [ {"path_full": "...ss_....1920x1080.jpg?t=..."} ] } } }
+    검색 HTML과 달리 신작(new_releases)·출시예정(coming_soon)을 JSON으로 준다.
+    가격은 최소 단위(원×100)이며, 출시예정작은 original_price=null / final_price=0 처럼
+    **가격이 아직 없는** 경우가 많아 무가격 저장을 허용한다(할인 목록엔 안 잡힘).
+
+    content_kind: "new"(최근 출시) | "upcoming"(출시 예정)
     """
-    app = data.get(str(appid)) or {}
-    if not app.get("success"):
+    out: list[ParsedItem] = []
+    for it in items:
+        try:
+            appid = it.get("id")
+            name = it.get("name")
+            if not appid or not name:
+                continue
+            appid = str(appid)
+
+            # 가격: 최소 단위(원×100) → 원. 출시예정은 미정(0/null)일 수 있다.
+            def _won(v) -> float | None:
+                return float(v) / 100.0 if isinstance(v, (int, float)) and v > 0 else None
+
+            original = _won(it.get("original_price"))
+            final = _won(it.get("final_price"))
+            disc = it.get("discount_percent") or 0
+            upcoming = content_kind == "upcoming"
+            # 출시예정은 가격 미정이면 그대로 None (0원=무료로 오해되지 않게)
+            if final is None and not upcoming and original is not None:
+                final = original
+            is_on_sale = bool(it.get("discounted")) and disc > 0 and final is not None
+            if original is None and final is not None:
+                original = final
+
+            image = it.get("header_image") or it.get("large_capsule_image")
+            image = image.split("?")[0] if image else _images(appid)[0]
+
+            out.append(
+                ParsedItem(
+                    store_product_id=appid,
+                    title=name,
+                    store_url=f"https://store.steampowered.com/app/{appid}/?cc=kr",
+                    image_url=image,
+                    regular_price=original,
+                    sale_price=final if is_on_sale else None,
+                    final_price=final,
+                    discount_percent=float(disc) if is_on_sale else None,
+                    is_on_sale=is_on_sale,
+                    extracted_data={
+                        "appid": appid,
+                        "gallery": [image],
+                        "content_kind": content_kind,
+                        "price_raw": {"original": original, "final": final, "discount": disc},
+                    },
+                )
+            )
+        except Exception:
+            logger.exception("스팀 featured 항목 파싱 실패: %s", it.get("id"))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# IStoreBrowseService/GetItems — 배치 보강 (출시일·종료일·퍼블리셔·스크린샷·평점)
+# ---------------------------------------------------------------------------
+# 검색 API(results_html)에는 이름·가격밖에 없어서 스팀만 출시일·할인 종료일이 비어 있었다.
+# 이 엔드포인트는 appid 50개를 한 번에 받아 그 모두를 준다(실측: 50개 요청 → 50건 응답,
+# 출시일·종료일·스크린샷·리뷰 100% 커버, 285KB / 0.9초).
+#
+# 부수 효과가 더 크다: 기존 갤러리 보강은 appdetails를 **상품당 1회** 불렀는데
+# (150개 = 요청 150회), 여기서 스크린샷까지 같이 오므로 50개 묶음 3회면 끝난다.
+STORE_ASSET_BASE = "https://shared.cloudflare.steamstatic.com/store_item_assets/"
+ELANG_KOREAN = 4          # Steam ELanguage enum (0=영어, 4=한국어)
+SHOT_VARIANT = ".1920x1080.jpg"  # 원본(1MB)이 아닌 표준 리사이즈본(340KB)
+
+
+def _epoch_iso(ts) -> str | None:
+    """유닉스 초 → ISO8601(UTC). 0/None/이상값은 None."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+    except (ValueError, TypeError, OSError, OverflowError):
+        return None
+
+
+def _clan_names(v) -> list[str]:
+    """[{"name": "...", "creator_clan_account_id": ...}, ...] → ["..."]"""
+    if not isinstance(v, list):
         return []
-    shots = (app.get("data") or {}).get("screenshots") or []
+    return [x["name"] for x in v if isinstance(x, dict) and x.get("name")]
+
+
+def _shot_urls(item: dict, limit: int) -> list[str]:
+    """screenshots.all_ages_screenshots → 절대 URL 목록.
+
+    filename은 "steam/apps/<appid>/ss_<hash>.jpg?t=<캐시버스터>" 형태다.
+    ?t= 는 떼어 URL을 안정화하고(값이 바뀔 때마다 버전 diff가 생김),
+    확장자 앞에 .1920x1080 을 넣어 원본(1MB) 대신 리사이즈본(340KB)을 쓴다.
+    """
+    shots = (item.get("screenshots") or {}).get("all_ages_screenshots") or []
     urls: list[str] = []
-    for s in shots:
-        u = s.get("path_full")
-        if u:
-            urls.append(u.split("?")[0])  # 캐시버스터(?t=) 제거해 URL 안정화
+    for s in sorted(shots, key=lambda x: x.get("ordinal") or 0):
+        fn = (s.get("filename") or "").split("?")[0]
+        if not fn.endswith(".jpg"):
+            continue
+        urls.append(STORE_ASSET_BASE + fn[: -len(".jpg")] + SHOT_VARIANT)
         if len(urls) >= limit:
             break
     return urls
+
+
+def parse_store_items(data: dict, *, gallery_limit: int = 6) -> dict[str, dict]:
+    """GetItems 응답을 {appid: {보강 필드...}} 로 정리한다.
+
+    값이 없는 필드는 아예 넣지 않는다 → 호출부에서 기존 값을 덮어쓰지 않게.
+    """
+    out: dict[str, dict] = {}
+    for it in (data.get("response") or {}).get("store_items") or []:
+        appid = it.get("appid")
+        if not appid or not it.get("success"):
+            continue
+
+        info: dict = {}
+
+        release = _epoch_iso((it.get("release") or {}).get("steam_release_date"))
+        if release:
+            info["release_date"] = release
+
+        # 할인 종료일: best_purchase_option.active_discounts[0].discount_end_date
+        bpo = it.get("best_purchase_option") or {}
+        discounts = bpo.get("active_discounts") or []
+        end = _epoch_iso(discounts[0].get("discount_end_date")) if discounts else None
+        if end:
+            info["sale_end_at"] = end
+
+        basic = it.get("basic_info") or {}
+        pubs = _clan_names(basic.get("publishers"))
+        devs = _clan_names(basic.get("developers"))
+        if pubs:
+            info["publishers"] = pubs
+        if devs:
+            info["developers"] = devs
+        if basic.get("short_description"):
+            info["short_description"] = basic["short_description"]
+
+        shots = _shot_urls(it, gallery_limit)
+        if shots:
+            info["screenshots"] = shots
+
+        # 리뷰 요약: 평점 필터/정렬에 쓸 수 있는 유일한 무료 신호
+        summary = (it.get("reviews") or {}).get("summary_filtered") or {}
+        if summary.get("review_count"):
+            info["review"] = {
+                "count": summary.get("review_count"),
+                "percent_positive": summary.get("percent_positive"),
+                "score": summary.get("review_score"),
+                "label": summary.get("review_score_label"),
+            }
+
+        langs = it.get("supported_languages")
+        if isinstance(langs, list) and langs:
+            info["korean"] = any(
+                l.get("elanguage") == ELANG_KOREAN and l.get("supported") for l in langs
+            )
+
+        if it.get("is_free"):
+            info["is_f2p"] = True
+        if it.get("name"):
+            info["title"] = it["name"]
+
+        out[str(appid)] = info
+    return out

@@ -46,6 +46,15 @@ DEALS_PAGES = [
     "https://www.microsoft.com/ko-kr/store/deals/games",
 ]
 
+# 신작·출시예정 — microsoft.com 스토어 페이지는 상품 목록이 내장 JSON으로 서버 렌더링돼
+# HTML만 받아도 productId를 뽑을 수 있다. (xbox.com/browse 계열은 클라이언트 렌더라 불가,
+#  emerald API는 channelKey를 무시하고 항상 같은 목록을 줘서 신작 용도로 못 쓴다.)
+RELEASE_PAGES = [
+    ("upcoming", "https://www.microsoft.com/ko-kr/store/coming-soon/games/xbox"),
+    ("new", "https://www.microsoft.com/ko-kr/store/new/games/xbox"),
+    ("free", "https://www.microsoft.com/ko-kr/store/top-free/games/xbox"),
+]
+
 # ----- 2단계 -----
 CATALOG_URL = (
     "https://displaycatalog.mp.microsoft.com/v7.0/products"
@@ -58,6 +67,8 @@ CATALOG_BATCH = 20     # 상세 API 한 번에 조회할 상품 수
 BIG_ID_RE = re.compile(r"\b(9[A-Z0-9]{11})\b")
 # 페이지 내장 JSON의 productId 를 정확히 집는다 (접두어 무관)
 PRODUCT_ID_RE = re.compile(r'"productId"\s*:\s*"([0-9A-Z]{12})"')
+# microsoft.com 스토어는 productId 를 소문자로 내려준다 (displaycatalog 조회 시 대문자로 변환)
+PRODUCT_ID_ANY_CASE_RE = re.compile(r'"productId"\s*:\s*"([0-9a-zA-Z]{12})"')
 
 
 class XboxCollector(BaseCollector):
@@ -72,10 +83,56 @@ class XboxCollector(BaseCollector):
             )
         logger.info("[xbox] 할인 상품 ID %d개 확보", len(product_ids))
 
-        # 20개씩 묶어서 상세 조회
-        for i in range(0, len(product_ids), CATALOG_BATCH):
-            batch = product_ids[i : i + CATALOG_BATCH]
-            self._fetch_catalog_batch(batch, batch_index=i // CATALOG_BATCH)
+        # 신작/출시예정/무료 표시를 상세 조회 **전에** 확보한다.
+        # 예전에는 상세를 다 받은 뒤 이 목록을 훑으면서 '이미 받은 건 건너뛰기'를 했는데,
+        # 엑스박스 목록 API가 할인만 주는 게 아니어서 신작·무료가 거의 다 이미 받은
+        # 상품이었다 → 전부 건너뛰어져 content_kind 가 하나도 안 붙었다
+        # (실측: new 50/50, free 50/50 이 중복 처리되어 신작·무료 탭이 비었다).
+        kinds = self._fetch_release_kinds()
+
+        # 목록에 없던 신작·무료만 뒤에 붙여, 상품 하나당 상세 조회는 한 번만 한다
+        known = set(product_ids)
+        all_ids = product_ids + [i for i in kinds if i not in known]
+        if len(all_ids) > len(product_ids):
+            logger.info("[xbox] 신작·무료 목록에서 %d개 추가", len(all_ids) - len(product_ids))
+
+        for i in range(0, len(all_ids), CATALOG_BATCH):
+            batch = all_ids[i : i + CATALOG_BATCH]
+            self._fetch_catalog_batch(batch, batch_index=i // CATALOG_BATCH, kinds=kinds)
+
+    def _fetch_release_kinds(self) -> dict[str, str]:
+        """microsoft.com 스토어의 신작·출시예정·무료 목록에서 {상품ID: 종류}를 만든다.
+
+        상세는 받지 않는다 — 여기서는 '무엇이 신작인가'만 알아내고, 실제 상세 조회는
+        할인 목록과 합쳐 한 번에 처리한다(같은 상품을 두 번 받지 않기 위해).
+        먼저 나온 종류를 유지한다(출시예정 → 신작 → 무료 순).
+        """
+        kinds: dict[str, str] = {}
+        for kind, url in RELEASE_PAGES:
+            try:
+                result = fetch(url)
+            except Exception as exc:
+                logger.warning("[xbox] %s 페이지 접속 실패: %s", kind, exc)
+                continue
+            if result.status_code != 200:
+                self.record_parse_error(url, f"{kind} 페이지 상태코드 {result.status_code}")
+                continue
+
+            self.save_raw(
+                result, document_type="list",
+                filename=f"{kind}-games.html", content_type="text/html",
+            )
+            self.pages_found += 1
+
+            # displaycatalog는 대문자 BigId를 쓰는데 스토어 페이지는 소문자로 준다
+            found = [i.upper() for i in dict.fromkeys(PRODUCT_ID_ANY_CASE_RE.findall(result.text))]
+            added = 0
+            for pid in found:
+                if pid not in kinds:
+                    kinds[pid] = kind
+                    added += 1
+            logger.info("[xbox] %s 상품 ID %d개 (신규 %d)", kind, len(found), added)
+        return kinds
 
     # =================================================================
     # 1단계: 할인 상품 ID 목록 — 여러 경로를 순서대로 시도
@@ -201,9 +258,16 @@ class XboxCollector(BaseCollector):
     # 2단계: 상품 상세 (displaycatalog)
     # =================================================================
 
-    def _fetch_catalog_batch(self, big_ids: list[str], *, batch_index: int) -> None:
+    def _fetch_catalog_batch(
+        self, big_ids: list[str], *, batch_index: int, kinds: dict[str, str] | None = None
+    ) -> None:
+        """상품 ID 묶음의 상세를 받아 저장한다.
+
+        kinds: {상품ID: "new"|"upcoming"|"free"}. 배치 안에 종류가 섞일 수 있어
+        배치 단위가 아니라 상품 단위로 붙인다.
+        """
         url = CATALOG_URL.format(ids=",".join(big_ids))
-        result = fetch(url, extra_headers={"Accept": "application/json"})
+        result = fetch(url, extra_headers={"Accept": "application/json"}, api=True)
 
         if result.status_code != 200:
             self.record_parse_error(url, f"카탈로그 API 상태코드 {result.status_code}")
@@ -222,4 +286,7 @@ class XboxCollector(BaseCollector):
             return
 
         for item in parse_catalog_products(data):
+            kind = (kinds or {}).get(item.store_product_id)
+            if kind:
+                item.extracted_data["content_kind"] = kind
             self.save_item(item, raw_doc_id)

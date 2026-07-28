@@ -23,6 +23,13 @@ RAW_BUCKET = os.environ.get("RAW_BUCKET", "raw-store-data")
 # 사람이 페이지를 넘겨 보는 속도(기본 6~12초)가 된다.
 REQUEST_DELAY_SECONDS = float(os.environ.get("REQUEST_DELAY_SECONDS", "6.0"))
 
+# 공식 JSON API 호출에 쓰는 간격(초). 실제 대기는 이 값~2배 (기본 1.5~3초).
+# 사람 흉내가 필요한 건 HTML 스토어 페이지를 훑을 때다. 스팀 검색 API, Xbox
+# displaycatalog, 닌텐도 가격 API 처럼 **프로그램 호출용으로 공개된 엔드포인트**에
+# 6~12초를 기다릴 이유가 없다(측정상 이 대기가 전체 수집 시간의 43~132%를 차지했다).
+# 그래도 무간격은 피해 서버 부담과 레이트리밋을 함께 배려한다.
+API_REQUEST_DELAY_SECONDS = float(os.environ.get("API_REQUEST_DELAY_SECONDS", "1.5"))
+
 # robots.txt(사이트의 로봇 출입 규칙) 준수 여부 — 기본 켜짐
 RESPECT_ROBOTS = os.environ.get("RESPECT_ROBOTS", "true").lower() != "false"
 
@@ -40,8 +47,9 @@ XBOX_MAX_ITEMS = int(os.environ.get("XBOX_MAX_ITEMS", "800"))
 # 스팀 할인은 수만 개라 전부 받으면 소규모 게임 노이즈 + DB 부담이 큼.
 STEAM_MAX_ITEMS = int(os.environ.get("STEAM_MAX_ITEMS", "800"))
 
-# 스팀 스크린샷 갤러리(캐러셀용)를 상위 N개까지 보강한다 (상세 API 추가 호출).
-# 이미 갤러리가 채워진 상품은 재조회하지 않으므로 신규 상품에만 비용이 든다. 0이면 끔.
+# (사용 안 함) 예전에는 스팀 갤러리를 상품당 appdetails 1회씩 불러 상위 N개만 채웠다.
+# 지금은 IStoreBrowseService/GetItems 배치(50개/회)가 스크린샷까지 같이 주므로
+# 상한 없이 전량 보강한다. 환경변수 호환을 위해 이름만 남겨 둔다.
 STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 
 # 닌텐도 스크린샷 갤러리를 '할인율 상위' N개까지 보강한다 (상품 상세 페이지 추가 로드).
@@ -50,17 +58,39 @@ STEAM_GALLERY_MAX = int(os.environ.get("STEAM_GALLERY_MAX", "150"))
 # 느리지만, 이미 갤러리가 채워진 상품은 재조회하지 않아 신규분에만 비용이 든다. 0이면 끔.
 NINTENDO_GALLERY_MAX = int(os.environ.get("NINTENDO_GALLERY_MAX", "150"))
 
-# PS 할인 종료일(endTime)은 목록 페이지엔 없고 상품 상세 페이지에만 있다.
-# 할인율 상위 N개만 상세를 추가로 받아 종료일을 보강한다(봇 차단 없어 일반 HTTP, 빠름). 0이면 끔.
-PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "60"))
+# 닌텐도 할인 목록 크롤을 한 실행에서 몇 페이지까지 볼지.
+# 예전에는 끝까지(53페이지) 훑느라 잡이 80분 걸렸다. 지금은 시세·할인 종료일을
+# 공식 가격 API로 받으므로(이미 아는 상품은 API가 전부 갱신하고 last_seen_at도 찍는다)
+# 목록 크롤에 남은 역할은 '새로 나타난 상품 발견'뿐이다.
+# 그래서 한 번에 일부만 보고, 실행마다 구간을 옮겨 며칠에 걸쳐 전체를 덮는다.
+NINTENDO_LIST_PAGES = int(os.environ.get("NINTENDO_LIST_PAGES", "12"))
+# 목록 전체 깊이(가정). 이 범위를 NINTENDO_LIST_PAGES 크기의 구간으로 나눠 회전한다.
+NINTENDO_LIST_SPAN = int(os.environ.get("NINTENDO_LIST_SPAN", "60"))
+
+# PS 할인 종료일(endTime)은 목록에 없고 단품 조회로만 얻는다.
+# 상세 HTML(1건 400KB) 대신 CTA GraphQL(1건 2.7KB)을 쓰게 되면서 같은 시간에
+# 훨씬 많이 훑을 수 있어 60 → 300으로 올렸다. 0이면 끔.
+PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "300"))
+
+# PS 신작·출시예정 상품의 출시일·퍼블리셔를 한 실행에서 새로 조회할 최대 건수.
+# 한 번 채운 상품은 DB에서 읽어 재사용하므로 실제 비용은 '새로 등장한 상품'뿐이다.
+PS_RELEASE_META_MAX = int(os.environ.get("PS_RELEASE_META_MAX", "150"))
 
 # PS 목록 크롤에 쓸 최대 시간(초). 이 시간이 지나면 남은 카테고리/페이지를 건너뛰고
 # 곧바로 '할인 종료일 보강' 단계로 넘어간다. PS 목록은 카테고리×페이지가 많아 정중한
 # 간격(6~12초)으로 전부 훑으면 GitHub Actions 잡 타임아웃(120분)을 넘겨 잡이 통째로
 # 취소되고, 그러면 크롤 뒤에 실행되는 종료일 보강이 아예 못 돌던 문제가 있었다.
 # 크롤을 이 시간으로 제한해, 남은 시간(보강 상위 N개 상세 요청) 안에서 종료일 보강이
-# 반드시 실행되도록 보장한다. 기본 85분(보강·마무리에 ~35분 여유).
-PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "5100"))
+# 반드시 실행되도록 보장한다. 기본 45분 — Actions 사용 분을 아끼기 위해 85분에서 줄였고,
+# 짧아진 만큼 매 실행 시작 카테고리를 회전시켜(collectors/playstation.py) 여러 실행에
+# 걸쳐 전체 카테고리를 훑는다.
+PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "2700"))
+
+# PS 잡 전체 시간 상한(초). 목록 크롤이 끝난 뒤의 보강 단계까지 포함한 총량이다.
+# 보강은 상품당 1요청이라 상한(PS_DETAIL_END_MAX 등)을 올리면 시간이 길어지는데,
+# 여기서 잘라 주지 않으면 Actions 잡 타임아웃(120분)에 걸려 실행이 통째로 '취소'로
+# 남는다. 100분에서 멈추면 그때까지 보강한 내용은 정상 저장되고 실행도 성공 처리된다.
+PS_TOTAL_BUDGET_SECONDS = int(os.environ.get("PS_TOTAL_BUDGET_SECONDS", "6000"))
 
 STORE_REGION = "KR"
 

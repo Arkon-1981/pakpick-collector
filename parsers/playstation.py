@@ -204,6 +204,39 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
     )
 
 
+def parse_concepts_from_next_data(next_data: dict) -> list[ParsedItem]:
+    """apolloState의 Concept 노드에서 상품을 뽑는다.
+
+    '신규 발매' 같은 일부 카테고리는 Product 노드가 껍데기({__typename,id})이고
+    실제 이름·가격·이미지는 게임 단위 엔티티인 Concept 노드에 들어 있다.
+    Concept.products[0].__ref 가 실제 Product ID를 가리키므로, 그 ID로 맞춰
+    기존 상품과 같은 식별자 체계를 유지한다.
+    """
+    apollo = (next_data.get("props") or {}).get("apolloState") or {}
+    items: list[ParsedItem] = []
+    for key, node in apollo.items():
+        if not isinstance(node, dict):
+            continue
+        if not (key.startswith("Concept:") or node.get("__typename") == "Concept"):
+            continue
+        try:
+            refs = node.get("products") or []
+            ref = refs[0].get("__ref") if refs and isinstance(refs[0], dict) else None
+            if not ref:
+                continue
+            # "Product:JP0101-PPSA34474_00-PROBBSPIRITS2026:ko-kr" → 가운데 ID만
+            parts = ref.split(":")
+            product_id = parts[1] if len(parts) >= 2 else None
+            if not product_id:
+                continue
+            item = _product_from_node(ref, {**node, "id": product_id}, apollo)
+            if item and item.title:
+                items.append(item)
+        except Exception:
+            logger.exception("PS Concept 노드 파싱 실패: %s", key)
+    return items
+
+
 def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
     items: list[ParsedItem] = []
 
@@ -213,6 +246,10 @@ def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
             if not isinstance(node, dict):
                 continue
             if key.startswith("Product:") or node.get("__typename") == "Product":
+                # 껍데기 참조 노드({__typename,id}만 있는 것)는 건너뛴다.
+                # 이런 카테고리는 실제 데이터가 Concept 노드에 있다.
+                if node.get("name") is None and node.get("price") is None:
+                    continue
                 try:
                     item = _product_from_node(key, node, apollo)
                     if item:
@@ -229,7 +266,12 @@ def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
 
     def walk(obj):
         if isinstance(obj, dict):
-            if obj.get("__typename") == "Product" and obj.get("id"):
+            if (
+                obj.get("__typename") == "Product"
+                and obj.get("id")
+                # 껍데기 참조 노드는 제외 (실제 데이터는 Concept 노드에 있음)
+                and not (obj.get("name") is None and obj.get("price") is None)
+            ):
                 try:
                     item = _product_from_node(f"Product:{obj['id']}", obj, {})
                     if item:
@@ -244,3 +286,122 @@ def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
 
     walk(next_data)
     return found
+
+
+# ---------------------------------------------------------------------------
+# GraphQL 카테고리 조회 (web.np.playstation.com/api/graphql)
+# ---------------------------------------------------------------------------
+# HTML 페이지는 한 번에 24개만 주지만 이 엔드포인트는 100개를 준다(실측: 한 카테고리
+# totalCount 5,906 / 요청당 100개 / 할인가·할인율 포함). 요청 수가 1/4로 줄어 같은
+# 시간예산에 훨씬 넓은 카탈로그를 덮는다.
+# 상품 노드 구조가 apolloState 의 Product 와 같아서 기존 변환기를 그대로 재사용한다.
+def parse_products_from_graphql(data: dict) -> list[ParsedItem]:
+    grid = ((data.get("data") or {}).get("categoryGridRetrieve")) or {}
+    items: list[ParsedItem] = []
+    for p in grid.get("products") or []:
+        if not isinstance(p, dict) or not p.get("id"):
+            continue
+        try:
+            item = _product_from_node(f"Product:{p['id']}", p, {})
+            if item and item.title:
+                items.append(item)
+        except Exception:
+            logger.exception("PS GraphQL 상품 파싱 실패: %s", p.get("id"))
+    return items
+
+
+def graphql_total_count(data: dict) -> int | None:
+    grid = ((data.get("data") or {}).get("categoryGridRetrieve")) or {}
+    return (grid.get("pageInfo") or {}).get("totalCount")
+
+
+# ---------------------------------------------------------------------------
+# GraphQL 단품 조회 파서 (상세 HTML 대체)
+# ---------------------------------------------------------------------------
+# 상세 HTML은 1건에 400KB인데, 같은 정보를 주는 공개 GraphQL 오퍼레이션이 있다.
+#   productRetrieveForCtasWithPrice  → 2.7KB  (할인 종료일)
+#   metGetProductById                → 16KB   (출시일·퍼블리셔·장르·등급)
+# 실측 기준 종료일 조회 기준 약 150배 가벼워, 같은 시간예산에서 훨씬 많이 훑을 수 있다.
+
+
+def parse_cta_price(data: dict, target_discounted: float | None = None) -> dict | None:
+    """productRetrieveForCtasWithPrice 응답에서 가격/할인 종료일을 뽑는다.
+
+    webctas에는 일반 구매가와 PS Plus 전용가가 함께 오고, 종료일이 서로 다르다.
+    target_discounted(목록에서 본 할인가)와 같은 값을 가진 CTA를 우선 고르고,
+    없으면 '일반 구매 가능(APPLICABLE)' CTA를, 그것도 없으면 첫 CTA를 쓴다.
+    """
+    product = (data.get("data") or {}).get("productRetrieve") or {}
+    ctas = [c for c in (product.get("webctas") or []) if isinstance(c, dict) and c.get("price")]
+    if not ctas:
+        return None
+
+    chosen = None
+    if target_discounted is not None:
+        tgt = int(round(target_discounted))
+        chosen = next(
+            (c for c in ctas if c["price"].get("discountedValue") == tgt), None
+        )
+    if chosen is None:
+        chosen = next(
+            (c for c in ctas if c["price"].get("applicability") == "APPLICABLE"), ctas[0]
+        )
+
+    price = chosen["price"]
+    return {
+        "sale_end_at": _parse_epoch_ms(price.get("endTime")),
+        "base_price": price.get("basePriceValue"),
+        "discounted_price": price.get("discountedValue"),
+        "discount_text": price.get("discountText"),
+        # PS Plus 가입자만 받는 할인인지 (일반 이용자 체감가와 다르다)
+        "plus_only": price.get("applicability") == "UPSELL"
+        or bool(price.get("isTiedToSubscription")),
+        "cta_type": chosen.get("type"),
+    }
+
+
+def parse_product_meta(data: dict) -> dict:
+    """metGetProductById 응답에서 출시일·퍼블리셔·장르·등급 등을 뽑는다.
+
+    값이 없는 항목은 넣지 않는다 → 호출부에서 기존 값을 덮어쓰지 않게.
+    Product에 비어 있는 값은 게임 단위 엔티티인 concept 쪽을 한 번 더 본다.
+    """
+    product = (data.get("data") or {}).get("productRetrieve") or {}
+    if not product:
+        return {}
+    concept = product.get("concept") or {}
+
+    def pick(key):
+        return product.get(key) or concept.get(key)
+
+    out: dict = {}
+    if pick("releaseDate"):
+        out["release_date"] = pick("releaseDate")
+    if pick("publisherName"):
+        out["publisher"] = pick("publisherName")
+
+    # 소니가 장르/서브장르를 합쳐서 주다 보니 같은 값이 두 번 오는 경우가 있다 → 순서 유지 중복 제거
+    genres = list(dict.fromkeys(
+        g["value"] for g in (pick("combinedLocalizedGenres") or [])
+        if isinstance(g, dict) and g.get("value")
+    ))
+    if genres:
+        out["genres"] = genres
+
+    rating = product.get("contentRating") or {}
+    if rating.get("description"):
+        out["content_rating"] = rating["description"]  # 예: "GRAC 15+"
+
+    for desc in (pick("descriptions") or []):
+        if isinstance(desc, dict) and desc.get("type") == "SHORT" and desc.get("value"):
+            out["short_description"] = desc["value"]
+            break
+
+    for notice in (pick("compatibilityNotices") or []):
+        if isinstance(notice, dict) and notice.get("type") == "NO_OF_PLAYERS":
+            out["players"] = notice.get("value")
+            break
+
+    if product.get("platforms"):
+        out["platforms"] = product["platforms"]
+    return out

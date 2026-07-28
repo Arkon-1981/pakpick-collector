@@ -237,6 +237,136 @@ def get_item_gallery(platform: str, store_region: str, store_product_id: str) ->
     return None
 
 
+def known_product_ids(platform: str, store_region: str, limit: int = 5000) -> list[str]:
+    """이미 저장된 상품 ID 목록. 공식 가격 API로 시세만 새로 받을 때 대상 명단으로 쓴다.
+
+    (닌텐도는 목록 크롤이 느려서, 한 번 알게 된 상품은 이후 API로만 갱신한다)
+    """
+    out: list[str] = []
+    page = 1000
+    for offset in range(0, limit, page):
+        res = (
+            get_client()
+            .table("store_items")
+            .select("store_product_id")
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .order("id")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        rows = res.data or []
+        out.extend(r["store_product_id"] for r in rows if r.get("store_product_id"))
+        if len(rows) < page:
+            break
+    return out
+
+
+def item_id_map(platform: str, store_region: str, limit: int = 20000) -> dict[str, int]:
+    """{상품ID: 내부 id} 전체를 한 번에 받아 온다.
+
+    find_item_id 를 상품마다 부르면 요청이 수천 번 난다(닌텐도 가격 갱신 2,000개
+    기준 2,000회). 목록으로 받으면 20여 회로 끝난다.
+    """
+    out: dict[str, int] = {}
+    page = 1000
+    for offset in range(0, limit, page):
+        res = (
+            get_client()
+            .table("store_items")
+            .select("id,store_product_id")
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .order("id")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        rows = res.data or []
+        for row in rows:
+            pid = row.get("store_product_id")
+            if pid:
+                out[pid] = row["id"]
+        if len(rows) < page:
+            break
+    return out
+
+
+def touch_last_seen_many(item_ids: list[int], chunk: int = 500) -> None:
+    """여러 상품의 last_seen_at 을 한 번에 갱신한다 (상품 정보는 건드리지 않음)."""
+    for i in range(0, len(item_ids), chunk):
+        batch = item_ids[i : i + chunk]
+        if not batch:
+            continue
+        get_client().table("store_items").update(
+            {"last_seen_at": _now()}
+        ).in_("id", batch).execute()
+
+
+def find_item_id(platform: str, store_region: str, store_product_id: str) -> int | None:
+    """상품의 내부 id만 찾는다. 아무것도 수정하지 않는다.
+
+    가격 API처럼 '시세만' 갱신할 때 쓴다. upsert_store_item 은 넘긴 값으로 제목·이미지·
+    current_data 를 통째로 덮어쓰므로, 가격만 있는 호출에 쓰면 기존 상품 정보가 지워진다.
+    """
+    res = (
+        get_client()
+        .table("store_items")
+        .select("id")
+        .eq("platform", platform)
+        .eq("store_region", store_region)
+        .eq("store_product_id", store_product_id)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0]["id"] if res.data else None
+
+
+def fetch_item_meta(platform: str, store_region: str, keys: list[str]) -> dict[str, dict]:
+    """저장된 상품들의 current_data 중 지정한 키만 뽑아 {상품ID: {키: 값}} 으로 돌려준다.
+
+    upsert_store_item 은 current_data 를 통째로 덮어쓴다. 그래서 한 번 보강해 둔
+    값(출시일·퍼블리셔 등)을 다음 실행에서 유지하려면, 저장 직전에 기존 값을 다시
+    실어 줘야 한다. 상품마다 조회하면 요청이 수백 번 나가므로 한 번에 받아 온다.
+
+    current_data 통째로가 아니라 필요한 키만 골라 받는다(PS는 노드 원본을 통째로
+    보관해서 행 하나가 수십 KB다 → 키만 뽑으면 수백 배 가볍다).
+    """
+    if not keys:
+        return {}
+    # `->>` 가 아니라 `->` 를 쓴다: `->>` 는 무조건 문자열로 바꿔 버려서
+    # 배열(genres, platforms)이 '["액션"]' 같은 문자열로 되돌아온다.
+    select = "store_product_id," + ",".join(f"{k}:current_data->{k}" for k in keys)
+    out: dict[str, dict] = {}
+    page = 1000
+    for offset in range(0, 20000, page):
+        res = (
+            get_client()
+            .table("store_items")
+            .select(select)
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .order("id")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        rows = res.data or []
+        for row in rows:
+            pid = row.get("store_product_id")
+            values = {k: row[k] for k in keys if row.get(k) is not None}
+            if pid and values:
+                out[pid] = values
+        if len(rows) < page:
+            break
+    return out
+
+
+def touch_last_seen(item_id: int) -> None:
+    """last_seen_at 만 갱신한다 (상품 정보는 건드리지 않음)."""
+    get_client().table("store_items").update(
+        {"last_seen_at": _now()}
+    ).eq("id", item_id).execute()
+
+
 def upsert_store_item(
     *,
     platform: str,

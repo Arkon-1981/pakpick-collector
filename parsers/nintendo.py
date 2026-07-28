@@ -249,3 +249,150 @@ def parse_detail_gallery(html: str, limit: int = 6) -> list[str]:
             if urls:
                 return urls
     return []
+
+
+# ---------------------------------------------------------------------------
+# 발매 일정(nintendo.com/kr/schedule) — 신작·발매예정
+# ---------------------------------------------------------------------------
+# 스토어(store.nintendo.co.kr)는 봇 차단(202)이라 브라우저가 필요하지만, 발매 일정
+# 페이지는 일반 HTTP로 받을 수 있고 본문에 상품 JSON이 그대로 박혀 있다.
+# 레코드 예:
+#   {"releaseDate":"2026-07-02T00:00:00.000Z","title":"Rain World",
+#    "nsuid":"70010000075084","hardware":"switch","publisher":"Akupara Games",
+#    "link":"https://store.nintendo.co.kr/70010000075084","imageHero":{"url":"..."}}
+# nsuid 는 스토어 URL 경로와 같은 값이라 기존 상품 ID 체계와 그대로 맞는다.
+_SCHEDULE_ITEM_RE = re.compile(
+    r'"releaseDate":"(?P<date>[^"]+)"'
+    r'.{0,400}?"title":"(?P<title>[^"]+)"'
+    r',"nsuid":"(?P<nsuid>\d+)"'
+    r'.{0,1200}?"hardware":"(?P<hardware>[^"]*)"',
+    re.S,
+)
+_IMAGE_ORG_RE = re.compile(r'"imageHeroOrg":\{"url":"([^"]+)"')
+
+
+def parse_schedule_page(html: str) -> list[ParsedItem]:
+    """발매 일정 페이지에서 신작·발매예정 상품을 뽑는다.
+
+    가격 정보는 없는 페이지라 가격은 비워 두고(is_on_sale=False) 출시일·세대만 채운다.
+    → 할인 목록에는 섞이지 않고, 웹에서 출시일 기준으로 신작/발매예정을 가른다.
+    """
+    text = html.replace('\\"', '"')  # RSC 스트림이 따옴표를 이스케이프해 둔다
+    items: list[ParsedItem] = []
+    seen: set[str] = set()
+
+    for m in _SCHEDULE_ITEM_RE.finditer(text):
+        nsuid = m.group("nsuid")
+        if nsuid in seen:
+            continue
+        seen.add(nsuid)
+
+        title = m.group("title").strip()
+        if not title:
+            continue
+
+        hardware = (m.group("hardware") or "").strip().lower()
+        gen = "switch2" if "switch2" in hardware or "2" in hardware else "switch1"
+
+        # 레코드 구간 안에서 대표 이미지 찾기 (없으면 생략)
+        seg = text[m.start() : m.end() + 600]
+        img = _IMAGE_ORG_RE.search(seg)
+        image_url = img.group(1).split("?")[0] if img else None
+
+        extracted = {
+            "nsuid": nsuid,
+            "release_date": m.group("date"),
+            "platform_generation": gen,
+            "hardware": hardware,
+            "gallery": [image_url] if image_url else [],
+        }
+        extracted.update(_schedule_extras(seg))
+
+        items.append(
+            ParsedItem(
+                store_product_id=nsuid,
+                title=title,
+                store_url=f"https://store.nintendo.co.kr/{nsuid}",
+                image_url=image_url,
+                is_on_sale=False,
+                extracted_data=extracted,
+            )
+        )
+    return items
+
+
+# 같은 레코드 안에 이미 들어 있는데 그동안 버리고 있던 값들 (추가 요청 0회).
+# 닌텐도는 상품 상세를 브라우저로만 열 수 있어(봇 차단) 이 정보를 따로 받으려면
+# 상품당 Playwright 로드가 필요하다 — 목록에서 같이 주워 두면 그 비용이 통째로 사라진다.
+_SCHED_PUBLISHER_RE = re.compile(r'"publisher":"([^"]+)"')
+_SCHED_RATING_RE = re.compile(r'"rating":(?:\{[^{}]*"name":"([^"]+)"|"([^"]+)")')
+_SCHED_CATEGORY_RE = re.compile(r'"category":\[([^\]]*)\]')
+
+
+def _schedule_extras(segment: str) -> dict:
+    """일정 레코드 구간에서 퍼블리셔·등급·판매 형태를 추가로 뽑는다."""
+    out: dict = {}
+    m = _SCHED_PUBLISHER_RE.search(segment)
+    if m:
+        out["publisher"] = m.group(1)
+    # rating 은 현재 모든 항목이 null 이다(실측 115/115). 닌텐도가 채우기 시작하면
+    # 그대로 잡히도록 남겨 둔다 — 없는 동안엔 키 자체를 넣지 않는다.
+    m = _SCHED_RATING_RE.search(segment)
+    if m:
+        out["content_rating"] = m.group(1) or m.group(2)
+    m = _SCHED_CATEGORY_RE.search(segment)
+    if m:
+        cats = re.findall(r'"([^"]+)"', m.group(1))
+        if cats:
+            out["categories"] = cats     # 예: ["다운로드 버전"], ["패키지 버전"]
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 공식 가격 API (api.ec.nintendo.com/v1/price) — 시세 갱신용
+# ---------------------------------------------------------------------------
+# 스토어 HTML 크롤은 봇 차단 때문에 브라우저가 필요해 느리다. 반면 이 엔드포인트는
+# 닌텐도가 공개한 가격 조회 API로, NSUID 50개를 한 번에 받고 차단도 없다.
+# 무엇보다 **세일 종료일(end_datetime)** 을 주는데, 이건 HTML 목록엔 없는 정보다.
+#
+# 응답 예:
+#   {"country":"KR","prices":[
+#     {"title_id":70010000119900,"sales_status":"onsale",
+#      "regular_price":{"raw_value":"22000","currency":"KRW"},
+#      "discount_price":{"raw_value":"7500","start_datetime":"...","end_datetime":"..."}}]}
+def parse_price_api(data: dict) -> dict[str, dict]:
+    """가격 API 응답을 {nsuid: {정가/할인가/종료일...}} 로 정리한다."""
+    out: dict[str, dict] = {}
+    for p in data.get("prices") or []:
+        tid = p.get("title_id")
+        if tid is None:
+            continue
+        reg = (p.get("regular_price") or {}).get("raw_value")
+        dis = p.get("discount_price") or {}
+        dis_raw = dis.get("raw_value")
+
+        def _num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        regular = _num(reg)
+        final = _num(dis_raw) if dis_raw is not None else regular
+        on_sale = (
+            regular is not None and final is not None and final < regular
+        )
+        out[str(tid)] = {
+            "regular_price": regular,
+            "final_price": final,
+            "is_on_sale": on_sale,
+            "discount_percent": (
+                round((1 - final / regular) * 100, 2)
+                if on_sale and regular
+                else None
+            ),
+            "sale_start_at": dis.get("start_datetime"),
+            "sale_end_at": dis.get("end_datetime"),
+            "sales_status": p.get("sales_status"),
+        }
+    return out
