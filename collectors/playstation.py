@@ -451,7 +451,11 @@ class PlaystationCollector(BaseCollector):
             if have:
                 # 기존 값 되살리기는 요청이 들지 않으므로 상한과 무관하게 항상 한다
                 item.extracted_data.update(have)
-                continue
+                # 다만 나중에 추가된 필드는 예전에 보강해 둔 상품에 없다. 있는 값만 보고
+                # 넘기면 그 상품은 영영 새 필드를 못 받는다(실측: 216건이 재사용으로
+                # 넘어가 DLC 판별이 아예 시작되지 않았다). 최신 필드가 없으면 다시 받는다.
+                if "content_type" in have:
+                    continue
             # self._meta_fetched 로 세는 이유: 이 함수는 페이지마다 불린다.
             # 지역 변수로 세면 '페이지당 상한'이 되어 사실상 무제한이 된다
             # (실측: 상한 150인데 216건 조회됨 — 9페이지 × 24개).
