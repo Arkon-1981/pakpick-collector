@@ -316,3 +316,53 @@ def parse_schedule_page(html: str) -> list[ParsedItem]:
             )
         )
     return items
+
+
+# ---------------------------------------------------------------------------
+# 공식 가격 API (api.ec.nintendo.com/v1/price) — 시세 갱신용
+# ---------------------------------------------------------------------------
+# 스토어 HTML 크롤은 봇 차단 때문에 브라우저가 필요해 느리다. 반면 이 엔드포인트는
+# 닌텐도가 공개한 가격 조회 API로, NSUID 50개를 한 번에 받고 차단도 없다.
+# 무엇보다 **세일 종료일(end_datetime)** 을 주는데, 이건 HTML 목록엔 없는 정보다.
+#
+# 응답 예:
+#   {"country":"KR","prices":[
+#     {"title_id":70010000119900,"sales_status":"onsale",
+#      "regular_price":{"raw_value":"22000","currency":"KRW"},
+#      "discount_price":{"raw_value":"7500","start_datetime":"...","end_datetime":"..."}}]}
+def parse_price_api(data: dict) -> dict[str, dict]:
+    """가격 API 응답을 {nsuid: {정가/할인가/종료일...}} 로 정리한다."""
+    out: dict[str, dict] = {}
+    for p in data.get("prices") or []:
+        tid = p.get("title_id")
+        if tid is None:
+            continue
+        reg = (p.get("regular_price") or {}).get("raw_value")
+        dis = p.get("discount_price") or {}
+        dis_raw = dis.get("raw_value")
+
+        def _num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        regular = _num(reg)
+        final = _num(dis_raw) if dis_raw is not None else regular
+        on_sale = (
+            regular is not None and final is not None and final < regular
+        )
+        out[str(tid)] = {
+            "regular_price": regular,
+            "final_price": final,
+            "is_on_sale": on_sale,
+            "discount_percent": (
+                round((1 - final / regular) * 100, 2)
+                if on_sale and regular
+                else None
+            ),
+            "sale_start_at": dis.get("start_datetime"),
+            "sale_end_at": dis.get("end_datetime"),
+            "sales_status": p.get("sales_status"),
+        }
+    return out

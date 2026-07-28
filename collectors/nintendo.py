@@ -15,6 +15,7 @@
   3. 상품 타일에서 정보 추출 → DB 저장
   4. 상품이 더 안 나오면 종료
 """
+import json
 from datetime import datetime, timezone
 
 from collectors.base import BaseCollector
@@ -22,7 +23,12 @@ from common import config
 from common.http_client import FetchResult, fetch
 from common.logging_util import get_logger
 from db import repository
-from parsers.nintendo import parse_detail_gallery, parse_list_page, parse_schedule_page
+from parsers.nintendo import (
+    parse_detail_gallery,
+    parse_list_page,
+    parse_price_api,
+    parse_schedule_page,
+)
 
 logger = get_logger(__name__)
 
@@ -31,6 +37,9 @@ LIST_URL = "https://store.nintendo.co.kr/digital/sale?p={page}"
 SCHEDULE_URL = "https://www.nintendo.com/kr/schedule"
 # 무료 게임 목록 (스토어라 봇 차단 가능 → 필요시 브라우저)
 FREE_URL = "https://store.nintendo.co.kr/digital/diigital-free"
+# 공식 가격 API — NSUID 50개 배치, 봇 차단 없음, 세일 종료일까지 제공
+PRICE_API_URL = "https://api.ec.nintendo.com/v1/price?country=KR&lang=en&ids={ids}"
+PRICE_API_BATCH = 50  # API가 50개 초과 시 "Over ids limit number" 반환
 MAX_PAGES = 200  # 무한 루프 방지용 안전장치
 
 # 닌텐도 스토어 할인 목록의 Switch 2 플랫폼 필터(Amasty Shop By). label_platform=4679.
@@ -62,6 +71,7 @@ class NintendoCollector(BaseCollector):
             self._collect_schedule()
             self._collect_pages()
             self._collect_free()
+            self._refresh_prices_via_api()
         finally:
             self._close_browser()
 
@@ -101,6 +111,67 @@ class NintendoCollector(BaseCollector):
                         len(items), new_cnt, up_cnt)
         except Exception:
             logger.exception("[nintendo] 발매 일정 수집 실패")
+
+    def _refresh_prices_via_api(self) -> None:
+        """공식 가격 API로 이미 아는 상품들의 시세를 갱신한다.
+
+        스토어 HTML 크롤은 봇 차단 때문에 브라우저가 필요해 느리지만, 이 API는
+        NSUID 50개를 한 번에 주고 차단도 없다. 무엇보다 **세일 종료일**을 주는데
+        HTML 목록엔 없는 정보라, 이 단계에서만 닌텐도 종료일을 채울 수 있다.
+
+        상품 자체(제목·이미지)는 이미 저장돼 있으므로 여기서는 가격 스냅샷만 남긴다.
+        """
+        try:
+            ids = repository.known_product_ids(self.platform, config.STORE_REGION)
+        except Exception:
+            logger.exception("[nintendo] 기존 상품 ID 조회 실패")
+            return
+        ids = [i for i in ids if i.isdigit()]
+        if not ids:
+            return
+
+        logger.info("[nintendo] 가격 API로 %d개 시세 갱신 시작", len(ids))
+        updated = ends = 0
+        for i in range(0, len(ids), PRICE_API_BATCH):
+            batch = ids[i : i + PRICE_API_BATCH]
+            try:
+                result = fetch(PRICE_API_URL.format(ids=",".join(batch)),
+                               extra_headers={"Accept": "application/json"})
+                if result.status_code != 200:
+                    logger.warning("[nintendo] 가격 API 상태코드 %s", result.status_code)
+                    continue
+                prices = parse_price_api(json.loads(result.text))
+            except Exception:
+                logger.exception("[nintendo] 가격 API 배치 실패 (%d~)", i)
+                continue
+
+            for nsuid, p in prices.items():
+                try:
+                    # 상품 정보(제목·이미지·content_kind)는 건드리지 않고 id만 찾는다.
+                    # upsert_store_item 을 쓰면 넘긴 값으로 통째로 덮어써 기존 정보가 지워진다.
+                    item_id = repository.find_item_id(
+                        self.platform, config.STORE_REGION, nsuid
+                    )
+                    if item_id is None:
+                        continue  # 아직 목록에서 못 본 상품 — 시세만 따로 만들진 않는다
+                    repository.touch_last_seen(item_id)
+                    repository.insert_price_snapshot_if_changed(
+                        store_item_id=item_id,
+                        raw_document_id=None,
+                        regular_price=p["regular_price"],
+                        sale_price=p["final_price"] if p["is_on_sale"] else None,
+                        final_price=p["final_price"],
+                        discount_percent=p["discount_percent"],
+                        sale_start_at=p["sale_start_at"],
+                        sale_end_at=p["sale_end_at"],
+                        is_on_sale=p["is_on_sale"],
+                    )
+                    updated += 1
+                    if p["sale_end_at"]:
+                        ends += 1
+                except Exception:
+                    logger.exception("[nintendo] 시세 저장 실패: %s", nsuid)
+        logger.info("[nintendo] 가격 API 갱신 %d건 (종료일 %d건)", updated, ends)
 
     def _collect_free(self) -> None:
         """무료 게임 목록. 스토어라 봇 차단이 있어 필요시 브라우저 경로를 탄다."""

@@ -237,6 +237,57 @@ def get_item_gallery(platform: str, store_region: str, store_product_id: str) ->
     return None
 
 
+def known_product_ids(platform: str, store_region: str, limit: int = 5000) -> list[str]:
+    """이미 저장된 상품 ID 목록. 공식 가격 API로 시세만 새로 받을 때 대상 명단으로 쓴다.
+
+    (닌텐도는 목록 크롤이 느려서, 한 번 알게 된 상품은 이후 API로만 갱신한다)
+    """
+    out: list[str] = []
+    page = 1000
+    for offset in range(0, limit, page):
+        res = (
+            get_client()
+            .table("store_items")
+            .select("store_product_id")
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .order("id")
+            .range(offset, offset + page - 1)
+            .execute()
+        )
+        rows = res.data or []
+        out.extend(r["store_product_id"] for r in rows if r.get("store_product_id"))
+        if len(rows) < page:
+            break
+    return out
+
+
+def find_item_id(platform: str, store_region: str, store_product_id: str) -> int | None:
+    """상품의 내부 id만 찾는다. 아무것도 수정하지 않는다.
+
+    가격 API처럼 '시세만' 갱신할 때 쓴다. upsert_store_item 은 넘긴 값으로 제목·이미지·
+    current_data 를 통째로 덮어쓰므로, 가격만 있는 호출에 쓰면 기존 상품 정보가 지워진다.
+    """
+    res = (
+        get_client()
+        .table("store_items")
+        .select("id")
+        .eq("platform", platform)
+        .eq("store_region", store_region)
+        .eq("store_product_id", store_product_id)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0]["id"] if res.data else None
+
+
+def touch_last_seen(item_id: int) -> None:
+    """last_seen_at 만 갱신한다 (상품 정보는 건드리지 않음)."""
+    get_client().table("store_items").update(
+        {"last_seen_at": _now()}
+    ).eq("id", item_id).execute()
+
+
 def upsert_store_item(
     *,
     platform: str,
