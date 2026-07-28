@@ -80,6 +80,10 @@ FILTER_URL_TEMPLATES = [
 class NintendoCollector(BaseCollector):
     platform = "nintendo"
 
+    # 목록 타일엔 이미지가 없는 경우가 있고, 발매 일정 항목은 가격이 아직 없다.
+    # 그래서 기본값보다 느슨하게 둔다 — 정상 변동으로 실패하면 가드가 무의미해진다.
+    FIELD_FLOORS = {"title": 0.95, "image_url": 0.60, "final_price": 0.70}
+
     def __init__(self):
         super().__init__()
         self._use_browser = False   # 일반 요청이 막히면 True로 전환
@@ -93,6 +97,9 @@ class NintendoCollector(BaseCollector):
             # 브라우저가 필요한 할인 목록보다 먼저 수집해 실패 위험을 줄인다.
             self._collect_schedule()
             self._collect_pages()
+            # 브라우저가 이미 살아 있는 이 시점에 한 번만 탐지한다 (결과에 영향 없음)
+            if self._use_browser:
+                self.probe_graphql()
             self._collect_free()
             self._refresh_prices_via_api()
         finally:
@@ -197,7 +204,9 @@ class NintendoCollector(BaseCollector):
                 except Exception:
                     logger.exception("[nintendo] 시세 저장 실패: %s", nsuid)
 
-        # 가격 API가 응답한 상품은 스토어에 살아 있다는 뜻 → 신선도 갱신
+        # 가격 API가 응답한 상품은 스토어에 살아 있다는 뜻 → 신선도 갱신.
+        # 목록에서 안 봤어도 '이번 실행에서 확인한 상품'이므로 가드 집계에도 넣는다.
+        self.items_seen.update(seen_item_ids)
         try:
             repository.touch_last_seen_many(seen_item_ids)
         except Exception:
@@ -452,6 +461,45 @@ class NintendoCollector(BaseCollector):
             self._page = context.new_page()
         return self._page
 
+    def probe_graphql(self) -> None:
+        """스토어의 Magento GraphQL 이 브라우저 안에서 응답하는지 한 번 확인한다.
+
+        왜 필요한가: 지금 목록 수집은 브라우저로 53페이지(페이지당 24개)를 여는 방식이고
+        이게 실행 시간의 대부분을 차지한다. 스토어는 Magento 라서 /graphql 이 있는데,
+        일반 HTTP 로 부르면 WAF 가 202로 막는다(실측: robots.txt 조차 202).
+        브라우저는 이미 그 챌린지를 통과했으니 페이지 안에서 fetch 하면 통할 수 있다.
+
+        통하면 페이지 53회 → 요청 몇 번으로 줄고 타일 파싱도 필요 없어진다.
+        다만 이 스토어의 GraphQL 스키마(사용 가능한 필드·필터)를 모르는 상태라,
+        먼저 응답만 기록해 두고 실제 전환은 그 결과를 보고 만든다.
+        수집 결과에는 아무 영향을 주지 않는다.
+        """
+        page = self._ensure_page()
+        if page is None:
+            return
+        query = (
+            "{products(search:\"\",pageSize:2,currentPage:1)"
+            "{total_count items{sku name url_key}}}"
+        )
+        try:
+            out = page.evaluate(
+                """async (q) => {
+                    try {
+                        const res = await fetch('/graphql', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({query: q}),
+                        });
+                        const t = await res.text();
+                        return {status: res.status, body: t.slice(0, 600)};
+                    } catch (e) { return {error: String(e)}; }
+                }""",
+                query,
+            )
+            logger.info("[nintendo] GraphQL 탐지 결과: %s", out)
+        except Exception as exc:
+            logger.info("[nintendo] GraphQL 탐지 실패(무해): %s", str(exc)[:150])
+
     def _fetch_with_browser(self, url: str, raw_response: bool = False) -> FetchResult | None:
         """Playwright로 실제 크롬을 띄워 페이지를 읽는다 (봇 차단 우회용).
 
@@ -478,11 +526,26 @@ class NintendoCollector(BaseCollector):
                     body = page.content()
                 return FetchResult(url, status, body.encode("utf-8"), {"x-fetched-via": "playwright-raw"})
 
-            # 목록용: 상품 타일이 그려질 때까지 최대 20초 대기 후 렌더링 DOM 사용
-            try:
-                page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
-            except Exception:
-                logger.warning("[nintendo] 브라우저에서도 상품 타일이 안 보임: %s", url)
+            # 목록용: 상품 타일이 그려질 때까지 최대 20초 대기 후 렌더링 DOM 사용.
+            # 안 보이면 한 번 더 시도한다 — 봇 차단은 일시적인 경우가 많고, 여기서
+            # 포기하면 그 페이지의 상품은 이번 실행에서 통째로 유실된다(실측: 매 실행
+            # 2~3페이지가 이렇게 빠졌다). 재시도 전에 잠깐 쉬어 부담을 낮춘다.
+            for attempt in (1, 2):
+                try:
+                    page.wait_for_selector("li.product-item, .product-item", timeout=20_000)
+                    break
+                except Exception:
+                    if attempt == 1:
+                        logger.info("[nintendo] 타일이 안 보임 — 잠시 후 재시도: %s", url)
+                        page.wait_for_timeout(4_000)
+                        try:
+                            page.reload(wait_until="domcontentloaded", timeout=45_000)
+                        except Exception:
+                            pass
+                    else:
+                        logger.warning(
+                            "[nintendo] 재시도 후에도 상품 타일이 안 보임: %s", url
+                        )
 
             html = page.content()
             return FetchResult(url, 200, html.encode("utf-8"), {"x-fetched-via": "playwright"})

@@ -53,7 +53,8 @@ RELEASE_CATEGORIES = [
 RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
 # 단품 오퍼레이션으로 보강하는 필드 — 다음 실행에서 그대로 되살릴 값들
 META_KEYS = ("release_date", "publisher", "genres", "content_rating",
-             "short_description", "players")
+             "short_description", "players", "platforms",
+             "content_type", "top_category", "store_classification")
 
 # GraphQL 카테고리 조회 — HTML(24개/요청) 대비 100개/요청이라 요청 수가 1/4.
 # 해시는 외부에서 얻어 직접 호출로 검증했지만(한 카테고리 5,906건 확인) 소니가
@@ -73,6 +74,10 @@ GQL_META_HASH = "a128042177bd93dd831164103d53b73ef790d56f51dae647064cb8f9d9fc9d1
 
 class PlaystationCollector(BaseCollector):
     platform = "playstation"
+
+    # 출시예정작은 가격이 없는 것이 정상이고(is_on_sale=False 로 저장된다),
+    # Concept 경로로만 들어온 상품은 이미지가 비는 경우가 있다.
+    FIELD_FLOORS = {"title": 0.95, "image_url": 0.70, "final_price": 0.80}
 
     # collect()에서 실제 값으로 설정된다 (단위 테스트/부분 호출 시의 기본값)
     _gql_ok = _cta_ok = _meta_ok = True
@@ -450,7 +455,11 @@ class PlaystationCollector(BaseCollector):
             if have:
                 # 기존 값 되살리기는 요청이 들지 않으므로 상한과 무관하게 항상 한다
                 item.extracted_data.update(have)
-                continue
+                # 다만 나중에 추가된 필드는 예전에 보강해 둔 상품에 없다. 있는 값만 보고
+                # 넘기면 그 상품은 영영 새 필드를 못 받는다(실측: 216건이 재사용으로
+                # 넘어가 DLC 판별이 아예 시작되지 않았다). 최신 필드가 없으면 다시 받는다.
+                if "content_type" in have:
+                    continue
             # self._meta_fetched 로 세는 이유: 이 함수는 페이지마다 불린다.
             # 지역 변수로 세면 '페이지당 상한'이 되어 사실상 무제한이 된다
             # (실측: 상한 150인데 216건 조회됨 — 9페이지 × 24개).

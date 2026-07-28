@@ -291,6 +291,17 @@ def item_id_map(platform: str, store_region: str, limit: int = 20000) -> dict[st
     return out
 
 
+def touch_versions_many(version_ids: list[int], chunk: int = 500) -> None:
+    """버전 행들의 last_seen_at 을 한 번에 갱신한다 (상품마다 PATCH 하지 않기 위해)."""
+    for i in range(0, len(version_ids), chunk):
+        batch = version_ids[i : i + chunk]
+        if not batch:
+            continue
+        get_client().table("store_item_versions").update(
+            {"last_seen_at": _now()}
+        ).in_("id", batch).execute()
+
+
 def touch_last_seen_many(item_ids: list[int], chunk: int = 500) -> None:
     """여러 상품의 last_seen_at 을 한 번에 갱신한다 (상품 정보는 건드리지 않음)."""
     for i in range(0, len(item_ids), chunk):
@@ -377,22 +388,33 @@ def upsert_store_item(
     image_url: str | None,
     extracted_data: dict,
     raw_document_id: int | None,
+    id_cache: dict[str, int] | None = None,
+    touch_queue: list[int] | None = None,
 ) -> int:
-    """상품 기본 정보를 저장/갱신하고, 내용이 바뀌었으면 버전 기록도 남긴다."""
+    """상품 기본 정보를 저장/갱신하고, 내용이 바뀌었으면 버전 기록도 남긴다.
+
+    id_cache: {상품ID: 내부 id}. 주면 '기존 상품 찾기' 조회를 건너뛴다.
+      실측(PS 1회 실행): 이 조회만 2,137회였다. 목록으로 한 번 받아 쓰면 1회로 줄고,
+      새로 넣은 상품은 캐시에 바로 반영해 같은 실행 안에서도 일관된다.
+    touch_queue: 버전 행의 last_seen_at 갱신을 여기 모아 두면 호출자가 한 번에 처리한다.
+      내용이 안 바뀐 상품마다 PATCH 를 보내면 실측 1,674회가 더 붙는다.
+    """
     client = get_client()
 
-    existing = (
-        client.table("store_items")
-        .select("id")
-        .eq("platform", platform)
-        .eq("store_region", store_region)
-        .eq("store_product_id", store_product_id)
-        .limit(1)
-        .execute()
-    )
+    item_id = id_cache.get(store_product_id) if id_cache is not None else None
+    if item_id is None:
+        existing = (
+            client.table("store_items")
+            .select("id")
+            .eq("platform", platform)
+            .eq("store_region", store_region)
+            .eq("store_product_id", store_product_id)
+            .limit(1)
+            .execute()
+        )
+        item_id = existing.data[0]["id"] if existing.data else None
 
-    if existing.data:
-        item_id = existing.data[0]["id"]
+    if item_id is not None:
         client.table("store_items").update(
             {
                 "title": title,
@@ -416,6 +438,9 @@ def upsert_store_item(
             }
         ).execute()
         item_id = res.data[0]["id"]
+        # 같은 실행 안에서 이 상품을 또 만나면 중복 insert 가 되지 않게 캐시에 넣는다
+        if id_cache is not None:
+            id_cache[store_product_id] = item_id
 
     # 상품 정보 버전 기록 — 내용 해시가 같으면 last_seen_at만 갱신
     data_hash = sha256_json(extracted_data)
@@ -428,9 +453,13 @@ def upsert_store_item(
         .execute()
     )
     if existing_version.data:
-        client.table("store_item_versions").update(
-            {"last_seen_at": _now()}
-        ).eq("id", existing_version.data[0]["id"]).execute()
+        vid = existing_version.data[0]["id"]
+        if touch_queue is not None:
+            touch_queue.append(vid)   # 호출자가 한 번에 갱신 (요청 수 절감)
+        else:
+            client.table("store_item_versions").update(
+                {"last_seen_at": _now()}
+            ).eq("id", vid).execute()
     else:
         client.table("store_item_versions").insert(
             {

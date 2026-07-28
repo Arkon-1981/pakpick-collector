@@ -3,6 +3,11 @@
 # 사용 전 준비 (GitHub 저장소 → Settings → Secrets and variables → Actions):
 #   SUPABASE_URL                = Supabase Project URL
 #   SUPABASE_SERVICE_ROLE_KEY   = Supabase secret 키 (sb_secret_...)
+#   VAPID_PRIVATE_KEY           = 웹 푸시 서명용 개인키 (웹의 공개키와 한 쌍)
+#   VAPID_SUBJECT               = 연락처 (예: mailto:you@example.com)  ※ 선택
+#
+# 원본 보존 기한: RAW_RETENTION_DAYS (기본 45일). Storage 무료 한도가 1GB라
+# 기한 없이 쌓으면 업로드가 실패하고 수집 자체가 망가진다.
 #
 # 수동 실행: GitHub 저장소 → Actions 탭 → "collect" → Run workflow
 
@@ -59,3 +64,66 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/collect.py --platform ${{ matrix.platform }}
+
+  # 수집이 모두 끝난 뒤 가격 알림을 보낸다.
+  # 수집과 분리한 이유: 플랫폼별로 4개 잡이 병렬로 도는데, 각자 발송하면
+  # 같은 사용자에게 알림이 네 번 갈 수 있다. 다 끝난 뒤 한 번만 보낸다.
+  notify:
+    needs: collect
+    if: always()          # 일부 플랫폼이 실패해도 성공한 플랫폼 기준으로는 알려야 한다
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: notify
+      cancel-in-progress: false
+    steps:
+      - name: 코드 내려받기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 가격 알림 발송
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          SITE_URL: https://pakpick-web.vercel.app
+        run: python scripts/notify.py
+
+  # 오래된 원본 정리. 수집이 끝난 뒤 하루 한 번(새벽 실행에서만) 돈다.
+  # 매 실행마다 돌 필요는 없고, Storage 한도에 닿기 전에 꾸준히 줄이는 게 목적이다.
+  cleanup:
+    needs: collect
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: cleanup
+      cancel-in-progress: false
+    steps:
+      - name: 코드 내려받기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 오래된 원본 정리
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RAW_RETENTION_DAYS: "45"
+        run: python scripts/cleanup.py
