@@ -66,6 +66,11 @@ class BaseCollector:
         self.pages_found = 0
         self.products_found = 0
         self.errors_count = 0
+        # 이번 실행에서 '확인한' 상품들의 내부 id.
+        # 전멸 방지 가드는 이 개수를 본다 — 목록에서 새로 저장한 건수(products_found)만
+        # 세면, 목록 크롤을 줄이고 공식 API로 시세를 갱신하는 방식에서 실제로는 수천 개를
+        # 확인했는데도 '급감'으로 오인한다(닌텐도에서 실제로 발생).
+        self.items_seen: set[int] = set()
 
     # ----- 하위 클래스가 구현하는 부분 -----
 
@@ -196,10 +201,13 @@ class BaseCollector:
             )
             raise
 
+        # 이번 실행에서 확인한 상품 수 (목록 저장 + API 갱신 등 모든 경로 합산, 중복 제외)
+        confirmed = len(self.items_seen) or self.products_found
+
         # 2) 전멸 방지 가드: 이번 수집이 최근 기준선(중앙값) 대비 급감했으면 크롤러 고장으로 처리
         if (
             base_count >= self.GUARD_MIN_BASELINE
-            and self.products_found < base_count * self.GUARD_ANOMALY_RATIO
+            and confirmed < base_count * self.GUARD_ANOMALY_RATIO
         ):
             protected = 0
             # 직전 실행이 '실패'가 아니었을 때만 1회 보호 (연속 고장이면 자연 소멸시켜 stale 방지)
@@ -211,7 +219,7 @@ class BaseCollector:
                 except Exception:
                     logger.exception("[%s] 데이터 보호 갱신 실패", self.platform)
             msg = (
-                f"이상 감지: 이번 수집 {self.products_found}개 < 최근 기준선(중앙값) {base_count}개의 "
+                f"이상 감지: 이번 수집 {confirmed}개 < 최근 기준선(중앙값) {base_count}개의 "
                 f"{int(self.GUARD_ANOMALY_RATIO * 100)}% — 크롤러 고장 의심. "
                 f"기존 상품 {protected}건 보호(last_seen 갱신)."
             )
@@ -220,7 +228,7 @@ class BaseCollector:
                 self.run_id,
                 status="failed",
                 pages_found=self.pages_found,
-                products_found=self.products_found,
+                products_found=confirmed,
                 errors_count=self.errors_count + 1,
                 error_message=msg[:2000],
             )
@@ -232,10 +240,10 @@ class BaseCollector:
             self.run_id,
             status=status,
             pages_found=self.pages_found,
-            products_found=self.products_found,
+            products_found=confirmed,
             errors_count=self.errors_count,
         )
         logger.info(
-            "[%s] 수집 완료 — 페이지 %d개, 상품 %d개, 오류 %d건",
-            self.platform, self.pages_found, self.products_found, self.errors_count,
+            "[%s] 수집 완료 — 페이지 %d개, 확인 상품 %d개(신규 저장 %d), 오류 %d건",
+            self.platform, self.pages_found, confirmed, self.products_found, self.errors_count,
         )

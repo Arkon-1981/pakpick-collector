@@ -197,7 +197,9 @@ class NintendoCollector(BaseCollector):
                 except Exception:
                     logger.exception("[nintendo] 시세 저장 실패: %s", nsuid)
 
-        # 가격 API가 응답한 상품은 스토어에 살아 있다는 뜻 → 신선도 갱신
+        # 가격 API가 응답한 상품은 스토어에 살아 있다는 뜻 → 신선도 갱신.
+        # 목록에서 안 봤어도 '이번 실행에서 확인한 상품'이므로 가드 집계에도 넣는다.
+        self.items_seen.update(seen_item_ids)
         try:
             repository.touch_last_seen_many(seen_item_ids)
         except Exception:
