@@ -49,7 +49,9 @@ def main() -> int:
             res = (
                 client.table("raw_documents")
                 .select("id,storage_path,file_size")
-                .lt("collected_at", cutoff)
+                # 같은 내용이 다시 수집되면 last_collected_at 만 갱신된다(행을 새로 만들지
+                # 않는다). 그래서 "마지막으로 본 시각"이 보존 기준이다.
+                .lt("last_collected_at", cutoff)
                 .order("id")
                 .limit(PAGE)
                 .execute()

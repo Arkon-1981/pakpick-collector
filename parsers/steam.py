@@ -235,6 +235,26 @@ def _shot_urls(item: dict, limit: int) -> list[str]:
     return urls
 
 
+# GetItems 의 store_items[].type — 4 는 DLC (0 은 게임)
+STORE_TYPE_DLC = 4
+# 스팀 상품 이미지 CDN. assets.asset_url_format 이 이 뒤에 붙는 상대 경로를 준다.
+ASSET_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/"
+
+
+def _asset_url(it: dict, key: str) -> str | None:
+    """GetItems assets 에서 이미지 절대 주소를 만든다.
+
+    asset_url_format = "steam/apps/1091500/${FILENAME}?t=1784714077"
+    assets[key]      = "26b96.../header_koreana.jpg"
+    """
+    assets = it.get("assets") or {}
+    fmt = assets.get("asset_url_format")
+    name = assets.get(key)
+    if not fmt or not name:
+        return None
+    return ASSET_BASE + fmt.replace("${FILENAME}", name)
+
+
 def parse_store_items(data: dict, *, gallery_limit: int = 6) -> dict[str, dict]:
     """GetItems 응답을 {appid: {보강 필드...}} 로 정리한다.
 
@@ -293,6 +313,18 @@ def parse_store_items(data: dict, *, gallery_limit: int = 6) -> dict[str, dict]:
             info["is_f2p"] = True
         if it.get("name"):
             info["title"] = it["name"]
+
+        # 상품 종류: 4 = DLC. 게임 목록에 DLC가 섞이면 "무료 게임"에 팩 티켓 같은 게 뜬다.
+        if it.get("type") == STORE_TYPE_DLC:
+            info["content_type"] = "addon"
+
+        # 대표 이미지: 스팀이 알려주는 정확한 경로를 쓴다.
+        # appid로 header.jpg 주소를 조립하면 헤더가 없는 상품(주로 DLC·신규 등록)에서
+        # 404가 나 이미지가 통째로 깨진다. asset_url_format 은 해시와 ?t= 버전까지
+        # 들어 있어 항상 유효하고, 이미지가 바뀌면 주소도 바뀐다.
+        img = _asset_url(it, "header")
+        if img:
+            info["image_url"] = img
 
         out[str(appid)] = info
     return out

@@ -29,7 +29,7 @@ logger = get_logger(__name__)
 SEARCH_URL = (
     "https://store.steampowered.com/search/results/"
     "?query&start={start}&count={count}"
-    "&specials=1&filter=globaltopsellers"
+    "&specials=1&filter=globaltopsellers&category1=998"
     "&cc=kr&l=koreana&infinite=1"
 )
 # 신작·출시예정 묶음 API (new_releases / coming_soon 섹션을 JSON으로 준다)
@@ -39,7 +39,7 @@ FEATURED_URL = (
 # 100% 할인(무료 배포) — 기간 한정으로 '소장 가능한 무료'. F2P(상시 무료)와 구분된다.
 FREE_URL = (
     "https://store.steampowered.com/search/results/"
-    "?query&start=0&count=50&specials=1&maxprice=free"
+    "?query&start=0&count=50&specials=1&maxprice=free&category1=998"
     "&cc=kr&l=koreana&infinite=1"
 )
 # 상시 무료(F2P) 인기작 — category1=998(게임) + maxprice=free. 장르 페이지는
@@ -62,6 +62,7 @@ GETITEMS_REQUEST = {
     "include_screenshots": True,     # 갤러리 (appdetails 상품별 호출 대체)
     "include_reviews": True,         # 리뷰 요약 (평점 정렬/필터용)
     "include_supported_languages": True,  # 한국어 지원 여부
+    "include_assets": True,          # 정확한 대표 이미지 주소 (조립하면 404가 난다)
 }
 PAGE_SIZE = 100
 
@@ -255,6 +256,13 @@ class SteamCollector(BaseCollector):
             item.sale_end_at = info["sale_end_at"]
         if not item.title and info.get("title"):
             item.title = info["title"]
+
+        # DLC 표시 — 웹이 이 값으로 게임 목록에서 걸러낸다
+        if info.get("content_type"):
+            data["content_type"] = info["content_type"]
+        # 목록에서 조립한 주소보다 스팀이 준 주소가 항상 옳다
+        if info.get("image_url"):
+            item.image_url = info["image_url"]
 
         for key in ("release_date", "publishers", "developers",
                     "short_description", "review", "korean"):
