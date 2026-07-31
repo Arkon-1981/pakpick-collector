@@ -118,8 +118,8 @@ def build_digest(rows: list[dict]) -> dict:
     return {
         "title": f"💸 찜한 게임 {len(rows)}개가 할인 중",
         "body": body,
-        # TODO: 찜 목록 화면이 생기면 그쪽으로 보낸다 (지금은 홈)
-        "url": f"{SITE_URL}/",
+        # 찜 목록은 ME 안에 있다 — 어느 상품 하나로 보낼 수 없으니 목록으로 보낸다
+        "url": f"{SITE_URL}/me",
         "tag": "wishlist-digest",
     }
 
