@@ -183,15 +183,26 @@ def search(keyword: str, limit: int | None = None) -> list[dict]:
 #   POST /v1/deeplink   {"coupangUrls": [...]}
 #   → {"rCode":"0","data":[{"originalUrl":…,"shortenUrl":"https://coupa.ng/…"}]}
 #
-# 한 번에 몇 개까지 받는지는 문서에 없다. 검색 limit 때와 같은 실수를 반복하지
-# 않도록 작게 시작하고, 거부당하면 더 줄인다.
-DEEPLINK_CHUNKS = (50, 20, 10)
+# 한 번에 20개까지다. 문서에는 없고 API 가 직접 알려 줬다:
+#   rCode=400 URL count should be less than or equal 20
+DEEPLINK_CHUNKS = (20, 10, 5)
 _ok_chunk: int | None = None
 
 
 def _is_size_error(exc: Exception) -> bool:
+    """'묶음이 너무 크다'는 응답인가.
+
+    쿠팡은 한도를 문구로만 알려 주고 형태도 제각각이다.
+      검색   : "limit is out of range"
+      딥링크 : "URL count should be less than or equal 20"
+    그래서 넉넉히 잡는다. 못 알아들으면 그 묶음을 통째로 버리게 되는데,
+    실제로 그렇게 135건을 날린 적이 있다.
+    """
     m = str(exc).lower()
-    return any(w in m for w in ("out of range", "too many", "exceed", "size"))
+    return any(
+        w in m
+        for w in ("out of range", "too many", "exceed", "less than or equal", "count should")
+    )
 
 
 def deeplink(urls: list[str]) -> dict[str, str]:
