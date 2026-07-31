@@ -77,10 +77,19 @@ def _throttle() -> None:
     _last_call = time.monotonic()
 
 
-def call(path_suffix: str, params: dict | None = None) -> dict:
-    """GET 호출. path_suffix 는 PREFIX 뒤에 붙는 부분이다.
+def call(
+    path_suffix: str,
+    params: dict | None = None,
+    *,
+    method: str = "GET",
+    body: dict | None = None,
+) -> dict:
+    """API 호출. path_suffix 는 PREFIX 뒤에 붙는 부분이다.
 
     실패하면 CoupangError 를 던진다 — 호출부가 그 키워드만 건너뛰고 계속 갈 수 있게.
+
+    POST 여도 서명 규칙은 같다. 공식 예제(HmacGenerator)를 보면
+    message = datetime + method + path + query 라 **본문은 서명에 들어가지 않는다.**
     """
     if not configured():
         raise CoupangError("COUPANG_ACCESS_KEY / COUPANG_SECRET_KEY 가 없습니다")
@@ -94,10 +103,12 @@ def call(path_suffix: str, params: dict | None = None) -> dict:
     result = fetch(
         url,
         extra_headers={
-            "Authorization": _auth_header("GET", path, query),
+            "Authorization": _auth_header(method, path, query),
             "Content-Type": "application/json;charset=UTF-8",
         },
         api=True,
+        method=method,
+        json_body=body,
     )
 
     if result.status_code == 401:
@@ -158,6 +169,65 @@ def search(keyword: str, limit: int | None = None) -> list[dict]:
         return data.get("productData") or []
 
     raise last or CoupangError("검색 실패")
+
+
+# --------------------------------------------------------------------------
+# 딥링크 — 오래 살아 있는 링크로 바꾼다
+# --------------------------------------------------------------------------
+# 검색 API 가 주는 productUrl 은 link.coupang.com/re/AFFSDP?…&requestid=…&traceid=
+# …&clickBeacon=… 형태다. requestid 는 그 응답 한 번에 딸린 값이라 오래 못 간다.
+# 우리는 링크를 DB 에 넣어 두고 며칠씩 보여 주므로 그 형태로는 안 된다.
+#
+# deeplink API 는 coupa.ng/xxxxx 같은 단축 링크를 준다 — 블로그 글에 박아 두는
+# 바로 그 링크라 시간이 지나도 살아 있다.
+#   POST /v1/deeplink   {"coupangUrls": [...]}
+#   → {"rCode":"0","data":[{"originalUrl":…,"shortenUrl":"https://coupa.ng/…"}]}
+#
+# 한 번에 몇 개까지 받는지는 문서에 없다. 검색 limit 때와 같은 실수를 반복하지
+# 않도록 작게 시작하고, 거부당하면 더 줄인다.
+DEEPLINK_CHUNKS = (50, 20, 10)
+_ok_chunk: int | None = None
+
+
+def _is_size_error(exc: Exception) -> bool:
+    m = str(exc).lower()
+    return any(w in m for w in ("out of range", "too many", "exceed", "size"))
+
+
+def deeplink(urls: list[str]) -> dict[str, str]:
+    """쿠팡 URL 목록 → {원본: 단축링크}. 변환 못 한 것은 빠진 채로 돌아온다."""
+    global _ok_chunk
+    if not urls:
+        return {}
+
+    out: dict[str, str] = {}
+    sizes = [_ok_chunk] if _ok_chunk else list(DEEPLINK_CHUNKS)
+
+    i = 0
+    while i < len(urls):
+        size = sizes[0]
+        chunk = urls[i : i + size]
+        try:
+            body = call("/v1/deeplink", method="POST", body={"coupangUrls": chunk})
+        except CoupangError as exc:
+            if _is_size_error(exc) and len(sizes) > 1:
+                sizes.pop(0)
+                logger.info("[coupang] deeplink %d개 거부됨 — %d개로 재시도", size, sizes[0])
+                continue           # i 를 안 올린다 → 같은 구간을 더 작게 다시
+            logger.warning("[coupang] deeplink 실패 (%d건 건너뜀): %s", len(chunk), exc)
+            i += size
+            continue
+
+        if _ok_chunk != size:
+            logger.info("[coupang] deeplink 묶음 %d개 사용", size)
+            _ok_chunk = size
+        for row in body.get("data") or []:
+            orig, short = row.get("originalUrl"), row.get("shortenUrl")
+            if orig and short:
+                out[orig] = short
+        i += size
+
+    return out
 
 
 def goldbox() -> list[dict]:

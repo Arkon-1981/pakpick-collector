@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from dataclasses import dataclass, field
 
 # --------------------------------------------------------------------------
@@ -152,6 +153,8 @@ class GearRow:
     review_count: int | None = None
     # 쿠팡 검색 순위 (1이 제일 위). 정가를 안 주므로 기본 정렬은 이걸로 한다.
     rank: int | None = None
+    # deeplink 변환에 쓸 '깨끗한' 상품 주소. 저장하지는 않는다.
+    canonical: str | None = field(default=None, compare=False)
     # 어떤 검색어로 찾았는지 (문제 추적용, 저장하지는 않는다)
     via: str = field(default="", compare=False)
 
@@ -161,6 +164,25 @@ class GearRow:
 # 반대로 몇백원짜리는 액정필름 1장 같은 미끼라 목록만 지저분해진다.
 MIN_PRICE = 2_000
 MAX_PRICE = 500_000
+
+
+def canonical_url(p: dict) -> str | None:
+    """검색 응답 → 평범한 쿠팡 상품 주소.
+
+    검색이 주는 productUrl 은 link.coupang.com/re/AFFSDP?…&requestid=… 형태인데
+    requestid·traceid 는 그 응답 한 번에 딸린 값이라 며칠 뒤엔 안 통한다.
+    deeplink API 에 넣어 오래 가는 링크로 바꾸려면 '깨끗한' 주소가 필요하다.
+
+    옵션(색상·용량)까지 맞추려면 itemId·vendorItemId 가 있어야 하는데 검색 응답
+    본문에는 없고 productUrl 쿼리에만 들어 있다 — 거기서 꺼낸다.
+    """
+    pid = p.get("productId")
+    if not pid:
+        return None
+    url = f"https://www.coupang.com/vp/products/{pid}"
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(p.get("productUrl") or "").query)
+    extra = {k: q[k][0] for k in ("itemId", "vendorItemId") if q.get(k)}
+    return url + ("?" + urllib.parse.urlencode(extra) if extra else "")
 
 
 def _num(v) -> float | None:
@@ -209,5 +231,6 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
         rating=_num(p.get("rating")),
         review_count=int(p["reviewCount"]) if str(p.get("reviewCount", "")).isdigit() else None,
         rank=int(p["rank"]) if str(p.get("rank", "")).isdigit() else None,
+        canonical=canonical_url(p),
         via=via,
     )

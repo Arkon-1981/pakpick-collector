@@ -94,6 +94,40 @@ def collect(keywords: list[str]) -> list[GearRow]:
     return list(seen.values())
 
 
+def to_durable_links(rows: list[GearRow]) -> int:
+    """product_url 을 오래 사는 딥링크(coupa.ng/…)로 바꾼다.
+
+    검색 API 가 주는 링크는 requestid·traceid·clickBeacon 이 박힌 1회성 주소다.
+    우리는 링크를 DB 에 담아 두고 며칠씩 보여 주므로 그대로 쓰면 나중에 눌렀을 때
+    쿠팡이 거부한다("사용권한이 없습니다"). deeplink API 가 주는 단축 링크는
+    블로그 글에 박아 두는 그 링크라 시간이 지나도 살아 있다.
+
+    변환에 실패한 것은 원래 링크를 그대로 둔다 — 없는 것보다는 낫다.
+    """
+    targets = [r for r in rows if r.canonical]
+    if not targets:
+        return 0
+
+    # 같은 주소가 여러 번 나올 수 있다. 한 번만 변환한다.
+    uniq = list(dict.fromkeys(r.canonical for r in targets))
+    mapping = coupang.deeplink(uniq)  # type: ignore[arg-type]
+
+    changed = 0
+    for r in targets:
+        short = mapping.get(r.canonical)
+        if short:
+            r.product_url = short
+            changed += 1
+
+    logger.info("[gear] 딥링크 변환 %d/%d건", changed, len(targets))
+    if changed < len(targets):
+        logger.warning(
+            "[gear] %d건은 변환 실패 — 검색이 준 1회성 링크를 그대로 씁니다",
+            len(targets) - changed,
+        )
+    return changed
+
+
 def save(rows: list[GearRow]) -> int:
     """gear_items 에 upsert. last_seen_at 을 갱신해 '아직 파는 물건'을 표시한다."""
     if not rows:
@@ -177,6 +211,7 @@ def main() -> int:
     rows = collect([args.keyword] if args.keyword else KEYWORDS)
 
     if args.dry_run:
+        logger.info("[gear] (dry-run) 딥링크 변환은 건너뜁니다")
         by_cat: dict[str, int] = {}
         for r in rows:
             by_cat[r.category] = by_cat.get(r.category, 0) + 1
@@ -188,6 +223,7 @@ def main() -> int:
         logger.info("[gear] 분류: %s", by_cat)
         return 0
 
+    to_durable_links(rows)
     saved = save(rows)
     logger.info("[gear] 저장 %d건", saved)
     sweep_out_of_range()
