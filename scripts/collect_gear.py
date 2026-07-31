@@ -34,20 +34,27 @@ logger = get_logger(__name__)
 
 # 검색어 — 전부 기기 이름을 포함한다. "게이밍 헤드셋" 처럼 기기 없는 말은 쓰지 않는다.
 # (그렇게 찾으면 PC 주변기기가 대부분이라 콘솔 특화라는 색이 사라진다)
+# 쿠팡이 한 번에 10건만 주므로(아래 SEARCH_LIMIT 주석) 물량은 키워드 수로 늘린다.
+# 실제 수집 결과를 보고 고른 목록이다 — "게임 컨트롤러 충전기"는 6건을 받아
+# 콘솔용이 0건이라 뺐고, 저장장치가 얇아서 기기별로 나눠 넣었다.
 KEYWORDS: list[str] = [
     # PlayStation
     "PS5 컨트롤러", "듀얼센스 충전 거치대", "PS5 확장 SSD", "PS5 케이스 커버",
-    "PS5 헤드셋", "PS5 거치대",
+    "PS5 헤드셋", "PS5 거치대", "듀얼센스 그립",
     # Xbox
     "엑스박스 컨트롤러", "엑스박스 충전 배터리", "엑스박스 헤드셋", "엑스박스 거치대",
+    "엑스박스 확장 스토리지",
     # Nintendo Switch
-    "닌텐도 스위치 컨트롤러", "닌텐도 스위치 케이스", "닌텐도 스위치 마이크로SD",
+    "닌텐도 스위치 컨트롤러", "닌텐도 스위치 케이스", "닌텐도 스위치 메모리카드",
     "닌텐도 스위치 충전 독", "조이콘 그립", "닌텐도 스위치 보호필름",
+    "닌텐도 스위치2 케이스", "닌텐도 스위치 파우치",
     # 공용
-    "콘솔 게임 헤드셋", "게임 컨트롤러 충전기",
+    "콘솔 게임 헤드셋", "게임패드 충전 거치대",
 ]
 
-SEARCH_LIMIT = None      # 쿠팡이 받아 주는 값을 자동으로 찾는다 (common/coupang.py)
+# 쿠팡 검색은 limit=20 을 거부하고 10 까지만 받는다(2026-07 확인).
+# None 이면 통하는 값을 자동으로 찾는다 — common/coupang.py 의 SEARCH_LIMITS.
+SEARCH_LIMIT = None
 UPSERT_CHUNK = 100
 
 
@@ -110,6 +117,7 @@ def save(rows: list[GearRow]) -> int:
             "is_free_ship": r.is_free_ship,
             "rating": r.rating,
             "review_count": r.review_count,
+            "rank": r.rank,
             "last_seen_at": now,
         }
         for r in rows

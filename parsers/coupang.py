@@ -69,9 +69,24 @@ def detect_consoles(name: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# 카테고리 판별 — 먼저 걸리는 것이 이긴다 (위쪽이 더 구체적)
+# 카테고리 판별
 # --------------------------------------------------------------------------
-# 주의: 저장장치를 오디오보다 먼저 본다. "마이크로SD" 가 "마이크"에 걸려
+# 쿠팡 상품명은 검색에 걸리려고 호환 기기·부속품 이름을 뒤에 잔뜩 붙인다.
+#   "PS5용 휴대용 케이스 … 여행 가방 콘솔 컨트롤러 헤드셋 및 …"
+# 그래서 "먼저 걸리는 단어"로 정하면 케이스가 죄다 컨트롤러가 된다
+# (실제로 119건 중 53건이 컨트롤러로 몰렸다).
+#
+# 대신 두 가지를 쓴다.
+#   · 쉼표 앞까지만 본다 — 쉼표 뒤는 "블랙, 1개, 단일상품" 같은 옵션이다
+#   · 그중 앞 HEAD_WINDOW 글자 안에서 **가장 뒤**에 나온 단어를 고른다
+#     한국어 상품명은 "수식어 + 핵심명사" 순서라 핵심이 뒤에 오고,
+#     검색용 나열은 그보다 더 뒤에 붙기 때문이다.
+#       "PS5 듀얼센스 컨트롤러 보관 케이스" → 케이스
+#       "호후 PS5 컨트롤러 듀얼 스탠드 충전기" → 충전기
+# 실제 수집 119건으로 확인한 규칙이다. 바꾸기 전에 같은 방식으로 확인할 것.
+HEAD_WINDOW = 40
+
+# 주의: 저장장치를 오디오보다 먼저 둔다. "마이크로SD" 가 "마이크"에 걸려
 # 헤드셋으로 분류되던 문제가 있었다. 부분 문자열로 맞추는 방식의 함정이다.
 CATEGORY_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("controller", ("컨트롤러", "패드", "조이콘", "joy-con", "joycon", "프로콘", "듀얼센스",
@@ -89,15 +104,18 @@ NOT_MIC = ("마이크로sd", "마이크로 sd", "마이크로파", "마이크로
 
 
 def detect_category(name: str) -> str:
-    n = _norm(name)
+    head = _norm(name).split(",")[0][:HEAD_WINDOW]
+    best, best_pos = "etc", -1
     for cat, words in CATEGORY_RULES:
         for w in words:
-            if w not in n:
+            pos = head.rfind(w)
+            if pos < 0:
                 continue
-            if w == "마이크" and any(x in n for x in NOT_MIC):
+            if w == "마이크" and any(x in head for x in NOT_MIC):
                 continue  # 마이크로SD 같은 말
-            return cat
-    return "etc"
+            if pos > best_pos:
+                best, best_pos = cat, pos
+    return best
 
 
 # --------------------------------------------------------------------------
@@ -120,8 +138,17 @@ class GearRow:
     is_free_ship: bool = False
     rating: float | None = None
     review_count: int | None = None
+    # 쿠팡 검색 순위 (1이 제일 위). 정가를 안 주므로 기본 정렬은 이걸로 한다.
+    rank: int | None = None
     # 어떤 검색어로 찾았는지 (문제 추적용, 저장하지는 않는다)
     via: str = field(default="", compare=False)
+
+
+# 값이 말이 되는 범위. 해외 배송 리스팅 중에 500GB SSD 를 137만원에 걸어 둔 것
+# 같은 게 섞여 들어온다 — 할인 정보 사이트에 그런 값이 뜨면 신뢰를 잃는다.
+# 반대로 몇백원짜리는 액정필름 1장 같은 미끼라 목록만 지저분해진다.
+MIN_PRICE = 2_000
+MAX_PRICE = 500_000
 
 
 def _num(v) -> float | None:
@@ -144,7 +171,7 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
         return None  # 콘솔과 무관 → 버린다
 
     price = _num(p.get("productPrice"))
-    if price is None or price <= 0:
+    if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
         return None
 
     # 쿠팡 검색 응답에는 정가가 없는 경우가 많다. 없으면 할인율 0으로 둔다 —
@@ -169,5 +196,6 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
         is_free_ship=bool(p.get("isFreeShipping")),
         rating=_num(p.get("rating")),
         review_count=int(p["reviewCount"]) if str(p.get("reviewCount", "")).isdigit() else None,
+        rank=int(p["rank"]) if str(p.get("rank", "")).isdigit() else None,
         via=via,
     )
