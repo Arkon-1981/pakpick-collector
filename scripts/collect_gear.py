@@ -94,6 +94,27 @@ def collect(keywords: list[str]) -> list[GearRow]:
     return list(seen.values())
 
 
+def _existing_deeplinks() -> dict[str, str]:
+    """이미 저장돼 있는 딥링크 {shop_product_id: url}.
+
+    딥링크는 link.coupang.com/a/XXXX 형태다. 검색이 준 1회성 링크
+    (/re/AFFSDP?…&requestid=…)는 여기 포함하지 않는다 — 그건 다시 만들어야 한다.
+    """
+    try:
+        res = (
+            get_client()
+            .table("gear_items")
+            .select("shop_product_id,product_url")
+            .eq("shop", "coupang")
+            .like("product_url", "%link.coupang.com/a/%")
+            .execute()
+        )
+    except Exception:
+        logger.exception("[gear] 기존 딥링크 조회 실패 — 전부 새로 만듭니다")
+        return {}
+    return {r["shop_product_id"]: r["product_url"] for r in (res.data or []) if r.get("product_url")}
+
+
 def to_durable_links(rows: list[GearRow]) -> int:
     """product_url 을 오래 사는 딥링크(coupa.ng/…)로 바꾼다.
 
@@ -108,24 +129,38 @@ def to_durable_links(rows: list[GearRow]) -> int:
     if not targets:
         return 0
 
-    # 같은 주소가 여러 번 나올 수 있다. 한 번만 변환한다.
-    uniq = list(dict.fromkeys(r.canonical for r in targets))
-    mapping = coupang.deeplink(uniq)  # type: ignore[arg-type]
+    # 이미 만들어 둔 딥링크는 다시 만들지 않는다. 딥링크는 한 번 받으면 계속
+    # 살아 있으므로 매번 새로 뽑을 이유가 없다 — 10분마다 도는데 그대로 두면
+    # 하루 1,000번 넘게 같은 변환을 반복하게 된다.
+    known = _existing_deeplinks()
+    reused = 0
+    todo: list[GearRow] = []
+    for r in targets:
+        got = known.get(r.shop_product_id)
+        if got:
+            r.product_url = got
+            reused += 1
+        else:
+            todo.append(r)
 
     changed = 0
-    for r in targets:
-        short = mapping.get(r.canonical)
-        if short:
-            r.product_url = short
-            changed += 1
+    if todo:
+        # 같은 주소가 여러 번 나올 수 있다. 한 번만 변환한다.
+        uniq = list(dict.fromkeys(r.canonical for r in todo))
+        mapping = coupang.deeplink(uniq)  # type: ignore[arg-type]
+        for r in todo:
+            short = mapping.get(r.canonical)
+            if short:
+                r.product_url = short
+                changed += 1
 
-    logger.info("[gear] 딥링크 변환 %d/%d건", changed, len(targets))
-    if changed < len(targets):
-        logger.warning(
-            "[gear] %d건은 변환 실패 — 검색이 준 1회성 링크를 그대로 씁니다",
-            len(targets) - changed,
-        )
-    return changed
+    logger.info(
+        "[gear] 딥링크 — 새로 %d건, 재사용 %d건 (전체 %d건)", changed, reused, len(targets)
+    )
+    failed = len(todo) - changed
+    if failed:
+        logger.warning("[gear] %d건은 변환 실패 — 검색이 준 1회성 링크를 그대로 씁니다", failed)
+    return changed + reused
 
 
 def save(rows: list[GearRow]) -> int:
