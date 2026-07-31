@@ -119,11 +119,45 @@ def call(path_suffix: str, params: dict | None = None) -> dict:
     return body
 
 
-def search(keyword: str, limit: int = 30) -> list[dict]:
+# 검색 limit 의 허용 범위가 문서마다 다르고 바뀌기도 한다(30 은 "out of range" 였다).
+# 큰 값부터 시도해 통하는 값을 찾고, 이후 호출은 그 값을 재사용한다.
+SEARCH_LIMITS = (20, 10, 5)
+_ok_limit: int | None = None
+
+
+def _is_limit_error(exc: Exception) -> bool:
+    m = str(exc).lower()
+    return "limit" in m and "range" in m
+
+
+def search(keyword: str, limit: int | None = None) -> list[dict]:
     """키워드 검색. 반환값은 상품 dict 목록 (제휴 링크 포함)."""
-    body = call("/products/search", {"keyword": keyword, "limit": limit})
-    data = body.get("data") or {}
-    return data.get("productData") or []
+    global _ok_limit
+
+    if limit is not None:
+        candidates = [limit]
+    elif _ok_limit is not None:
+        candidates = [_ok_limit]
+    else:
+        candidates = list(SEARCH_LIMITS)
+
+    last: Exception | None = None
+    for lim in candidates:
+        try:
+            body = call("/products/search", {"keyword": keyword, "limit": lim})
+        except CoupangError as exc:
+            if _is_limit_error(exc) and lim != candidates[-1]:
+                logger.info("[coupang] limit=%d 거부됨 — 더 작은 값으로 재시도", lim)
+                last = exc
+                continue
+            raise
+        if _ok_limit != lim:
+            logger.info("[coupang] 검색 limit=%d 사용", lim)
+            _ok_limit = lim
+        data = body.get("data") or {}
+        return data.get("productData") or []
+
+    raise last or CoupangError("검색 실패")
 
 
 def goldbox() -> list[dict]:

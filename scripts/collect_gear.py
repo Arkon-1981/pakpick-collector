@@ -47,7 +47,7 @@ KEYWORDS: list[str] = [
     "콘솔 게임 헤드셋", "게임 컨트롤러 충전기",
 ]
 
-SEARCH_LIMIT = 30       # 키워드당 받아올 개수
+SEARCH_LIMIT = None      # 쿠팡이 받아 주는 값을 자동으로 찾는다 (common/coupang.py)
 UPSERT_CHUNK = 100
 
 
