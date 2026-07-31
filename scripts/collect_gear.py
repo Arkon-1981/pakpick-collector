@@ -94,6 +94,35 @@ def collect(keywords: list[str]) -> list[GearRow]:
     return list(seen.values())
 
 
+def collect_goldbox() -> list[GearRow]:
+    """골드박스(오늘의 특가) 중 콘솔 물건만.
+
+    검색 API 는 정가를 안 줘서 "할인 중"을 알 방법이 없다. 그래서 목록에 상품은
+    많은데 진짜 할인은 거의 없다(첫 192건 중 정가 있는 것 0건). 골드박스는 그
+    자체가 '지금 특가'라는 뜻이라 이 문제를 정면으로 푸는 유일한 소스다.
+
+    콘솔 물건이 없는 날도 있다. 0건은 실패가 아니라 정상이다 —
+    검색 쪽과 달리 여기서 예외를 던지면 안 된다.
+    """
+    try:
+        items = coupang.goldbox()
+    except coupang.CoupangError as exc:
+        logger.warning("[gear] 골드박스 조회 실패: %s", exc)
+        return []
+
+    rows: list[GearRow] = []
+    for p in items:
+        row = to_row(p, via="goldbox")
+        if row is not None:
+            row.is_goldbox = True
+            rows.append(row)
+    logger.info("[gear] 골드박스 — 받음 %d, 콘솔용 %d", len(items), len(rows))
+    if rows:
+        deals = sum(1 for r in rows if r.discount > 0)
+        logger.info("[gear] 골드박스 콘솔용 중 정가까지 온 것 %d건", deals)
+    return rows
+
+
 def _existing_deeplinks() -> dict[str, str]:
     """이미 저장돼 있는 딥링크 {shop_product_id: url}.
 
@@ -205,6 +234,37 @@ def save(rows: list[GearRow]) -> int:
     return saved
 
 
+def mark_goldbox(rows: list[GearRow]) -> int:
+    """오늘 골드박스에 오른 상품에 goldbox_at 을 찍는다.
+
+    upsert 본문에 섞지 않고 따로 하는 이유
+      PostgREST 는 보낸 dict 들의 키로 컬럼 목록을 만든다. 행마다 키가 다르면
+      목록이 어긋난다. 그렇다고 전부 goldbox_at 키를 넣으면 골드박스가 아닌
+      행이 null 로 덮여 '어제 특가였다'는 기록이 지워진다.
+
+    지우지 않고 시각만 갱신한다 — '오늘 특가인가'는 뷰에서 시간으로 판단한다.
+    last_seen_at 과 같은 방식이라 따로 초기화할 필요가 없다.
+    """
+    ids = [r.shop_product_id for r in rows if r.is_goldbox]
+    if not ids:
+        return 0
+    try:
+        res = (
+            get_client()
+            .table("gear_items")
+            .update({"goldbox_at": datetime.now(timezone.utc).isoformat()})
+            .eq("shop", "coupang")
+            .in_("shop_product_id", ids)
+            .execute()
+        )
+    except Exception:
+        logger.exception("[gear] 골드박스 표시 실패 (%d건)", len(ids))
+        return 0
+    n = len(res.data or [])
+    logger.info("[gear] 골드박스 표시 %d건", n)
+    return n
+
+
 def sweep_out_of_range() -> int:
     """값 범위를 벗어난 채 남아 있는 상품을 목록에서 내린다.
 
@@ -245,6 +305,23 @@ def main() -> int:
 
     rows = collect([args.keyword] if args.keyword else KEYWORDS)
 
+    # 골드박스는 키워드 하나만 볼 때는 건너뛴다 (그건 검색 디버깅용이다)
+    if not args.keyword:
+        by_id = {r.shop_product_id: r for r in rows}
+        for g in collect_goldbox():
+            existing = by_id.get(g.shop_product_id)
+            if existing is None:
+                by_id[g.shop_product_id] = g
+            else:
+                # 이미 검색으로 잡힌 상품이면 특가 표시만 옮긴다. 골드박스 응답이
+                # 정가를 준다면 그쪽 값이 더 낫다 — 검색은 정가를 아예 안 준다.
+                existing.is_goldbox = True
+                if g.base_price and not existing.base_price:
+                    existing.base_price = g.base_price
+                    existing.discount = g.discount
+                    existing.price = g.price
+        rows = list(by_id.values())
+
     if args.dry_run:
         logger.info("[gear] (dry-run) 딥링크 변환은 건너뜁니다")
         by_cat: dict[str, int] = {}
@@ -261,6 +338,7 @@ def main() -> int:
     to_durable_links(rows)
     saved = save(rows)
     logger.info("[gear] 저장 %d건", saved)
+    mark_goldbox(rows)
     sweep_out_of_range()
     return 0 if saved or not rows else 1
 

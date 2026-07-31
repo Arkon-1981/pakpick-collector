@@ -155,6 +155,8 @@ class GearRow:
     rank: int | None = None
     # deeplink 변환에 쓸 '깨끗한' 상품 주소. 저장하지는 않는다.
     canonical: str | None = field(default=None, compare=False)
+    # 오늘 골드박스(쿠팡 특가)에 올라온 상품인가
+    is_goldbox: bool = field(default=False, compare=False)
     # 어떤 검색어로 찾았는지 (문제 추적용, 저장하지는 않는다)
     via: str = field(default="", compare=False)
 

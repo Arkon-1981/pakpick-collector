@@ -242,6 +242,21 @@ def deeplink(urls: list[str]) -> dict[str, str]:
 
 
 def goldbox() -> list[dict]:
-    """골드박스(오늘의 특가). 콘솔 물건이 섞여 있을 때만 쓸모가 있다."""
-    body = call("/products/goldbox")
-    return body.get("data") or []
+    """골드박스(오늘의 특가).
+
+    검색 API 는 정가를 안 줘서 "할인 중"인지 알 방법이 없다. 골드박스는 그 자체가
+    '지금 특가'라는 뜻이라, 할인 정보 사이트에서는 이게 유일하게 의미 있는 소스다.
+    쿠팡이 매일 오전 7:30 에 갱신하므로 자주 부를 이유가 없다.
+
+    콘솔 물건이 매일 있으리란 보장은 없다 — 없는 날은 빈 목록이 정상이다.
+    """
+    body = call("/v1/products/goldbox")
+    data = body.get("data") or []
+
+    # 이 응답에 정가/할인율이 들어오는지는 문서에 없다. 실제로 뭐가 오는지
+    # 한 번 찍어 두면 다음에 추측하지 않아도 된다 — 검색 응답에 정가가 없다는
+    # 것도 이렇게 확인했다.
+    if data:
+        logger.info("[coupang] 골드박스 %d건, 응답 필드: %s",
+                    len(data), sorted(data[0].keys()))
+    return data
