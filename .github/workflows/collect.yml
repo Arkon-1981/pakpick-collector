@@ -25,7 +25,7 @@ on:
         required: false
         default: "all"
         type: choice
-        options: [all, nintendo, playstation, xbox, steam]
+        options: [all, nintendo, playstation, xbox, steam, gear]
 
 jobs:
   collect:
@@ -97,6 +97,38 @@ jobs:
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           SITE_URL: https://pakpick-web.vercel.app
         run: python scripts/notify.py
+
+  # 주변기기(쿠팡 파트너스). 게임 수집과 무관하므로 병렬로 돌린다.
+  # 하루 한 번만 — 쿠팡 API 는 호출 한도가 있고, 주변기기 가격은 게임 할인만큼
+  # 자주 바뀌지 않는다. 키가 없으면 잡 자체를 건너뛴다(수집 전체를 실패시키지 않게).
+  gear:
+    if: github.event_name == 'schedule' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'gear'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: gear
+      cancel-in-progress: false
+    steps:
+      - name: 코드 내려받기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 주변기기 수집
+        if: ${{ secrets.COUPANG_ACCESS_KEY != '' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+        run: python scripts/collect_gear.py
 
   # 오래된 원본 정리. 수집이 끝난 뒤 하루 한 번(새벽 실행에서만) 돈다.
   # 매 실행마다 돌 필요는 없고, Storage 한도에 닿기 전에 꾸준히 줄이는 게 목적이다.
