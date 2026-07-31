@@ -108,6 +108,11 @@ jobs:
     concurrency:
       group: gear
       cancel-in-progress: false
+    # 시크릿을 잡 단위 env 로 올린다. `if:` 조건에서는 secrets 컨텍스트를 쓸 수 없고
+    # (워크플로 파싱 자체가 실패한다) env 컨텍스트는 쓸 수 있다.
+    env:
+      COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+      COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
     steps:
       - name: 코드 내려받기
         uses: actions/checkout@v4
@@ -121,14 +126,17 @@ jobs:
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
 
+      # 키가 없으면 조용히 건너뛴다 — 주변기기 때문에 수집 전체가 빨간색이 되면 안 된다
       - name: 주변기기 수집
-        if: ${{ secrets.COUPANG_ACCESS_KEY != '' }}
+        if: env.COUPANG_ACCESS_KEY != ''
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
-          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
         run: python scripts/collect_gear.py
+
+      - name: 키 없음 안내
+        if: env.COUPANG_ACCESS_KEY == ''
+        run: echo "COUPANG_ACCESS_KEY 가 없어 주변기기 수집을 건너뜁니다."
 
   # 오래된 원본 정리. 수집이 끝난 뒤 하루 한 번(새벽 실행에서만) 돈다.
   # 매 실행마다 돌 필요는 없고, Storage 한도에 닿기 전에 꾸준히 줄이는 게 목적이다.
