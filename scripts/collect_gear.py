@@ -28,26 +28,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import coupang                       # noqa: E402
 from common.logging_util import get_logger       # noqa: E402
 from db.client import get_client                 # noqa: E402
-from parsers.coupang import GearRow, to_row      # noqa: E402
+from parsers.coupang import MAX_PRICE, MIN_PRICE, GearRow, to_row  # noqa: E402
 
 logger = get_logger(__name__)
 
 # 검색어 — 전부 기기 이름을 포함한다. "게이밍 헤드셋" 처럼 기기 없는 말은 쓰지 않는다.
 # (그렇게 찾으면 PC 주변기기가 대부분이라 콘솔 특화라는 색이 사라진다)
+# 쿠팡이 한 번에 10건만 주므로(아래 SEARCH_LIMIT 주석) 물량은 키워드 수로 늘린다.
+# 실제 수집 결과를 보고 고른 목록이다 — "게임 컨트롤러 충전기"는 6건을 받아
+# 콘솔용이 0건이라 뺐고, 저장장치가 얇아서 기기별로 나눠 넣었다.
 KEYWORDS: list[str] = [
     # PlayStation
     "PS5 컨트롤러", "듀얼센스 충전 거치대", "PS5 확장 SSD", "PS5 케이스 커버",
-    "PS5 헤드셋", "PS5 거치대",
+    "PS5 헤드셋", "PS5 거치대", "듀얼센스 그립",
     # Xbox
     "엑스박스 컨트롤러", "엑스박스 충전 배터리", "엑스박스 헤드셋", "엑스박스 거치대",
+    "엑스박스 확장 스토리지",
     # Nintendo Switch
-    "닌텐도 스위치 컨트롤러", "닌텐도 스위치 케이스", "닌텐도 스위치 마이크로SD",
+    "닌텐도 스위치 컨트롤러", "닌텐도 스위치 케이스", "닌텐도 스위치 메모리카드",
     "닌텐도 스위치 충전 독", "조이콘 그립", "닌텐도 스위치 보호필름",
+    "닌텐도 스위치2 케이스", "닌텐도 스위치 파우치",
     # 공용
-    "콘솔 게임 헤드셋", "게임 컨트롤러 충전기",
+    "콘솔 게임 헤드셋", "게임패드 충전 거치대",
 ]
 
-SEARCH_LIMIT = 30       # 키워드당 받아올 개수
+# 쿠팡 검색은 limit=20 을 거부하고 10 까지만 받는다(2026-07 확인).
+# None 이면 통하는 값을 자동으로 찾는다 — common/coupang.py 의 SEARCH_LIMITS.
+SEARCH_LIMIT = None
 UPSERT_CHUNK = 100
 
 
@@ -87,6 +94,75 @@ def collect(keywords: list[str]) -> list[GearRow]:
     return list(seen.values())
 
 
+def _existing_deeplinks() -> dict[str, str]:
+    """이미 저장돼 있는 딥링크 {shop_product_id: url}.
+
+    딥링크는 link.coupang.com/a/XXXX 형태다. 검색이 준 1회성 링크
+    (/re/AFFSDP?…&requestid=…)는 여기 포함하지 않는다 — 그건 다시 만들어야 한다.
+    """
+    try:
+        res = (
+            get_client()
+            .table("gear_items")
+            .select("shop_product_id,product_url")
+            .eq("shop", "coupang")
+            .like("product_url", "%link.coupang.com/a/%")
+            .execute()
+        )
+    except Exception:
+        logger.exception("[gear] 기존 딥링크 조회 실패 — 전부 새로 만듭니다")
+        return {}
+    return {r["shop_product_id"]: r["product_url"] for r in (res.data or []) if r.get("product_url")}
+
+
+def to_durable_links(rows: list[GearRow]) -> int:
+    """product_url 을 오래 사는 딥링크(coupa.ng/…)로 바꾼다.
+
+    검색 API 가 주는 링크는 requestid·traceid·clickBeacon 이 박힌 1회성 주소다.
+    우리는 링크를 DB 에 담아 두고 며칠씩 보여 주므로 그대로 쓰면 나중에 눌렀을 때
+    쿠팡이 거부한다("사용권한이 없습니다"). deeplink API 가 주는 단축 링크는
+    블로그 글에 박아 두는 그 링크라 시간이 지나도 살아 있다.
+
+    변환에 실패한 것은 원래 링크를 그대로 둔다 — 없는 것보다는 낫다.
+    """
+    targets = [r for r in rows if r.canonical]
+    if not targets:
+        return 0
+
+    # 이미 만들어 둔 딥링크는 다시 만들지 않는다. 딥링크는 한 번 받으면 계속
+    # 살아 있으므로 매번 새로 뽑을 이유가 없다 — 10분마다 도는데 그대로 두면
+    # 하루 1,000번 넘게 같은 변환을 반복하게 된다.
+    known = _existing_deeplinks()
+    reused = 0
+    todo: list[GearRow] = []
+    for r in targets:
+        got = known.get(r.shop_product_id)
+        if got:
+            r.product_url = got
+            reused += 1
+        else:
+            todo.append(r)
+
+    changed = 0
+    if todo:
+        # 같은 주소가 여러 번 나올 수 있다. 한 번만 변환한다.
+        uniq = list(dict.fromkeys(r.canonical for r in todo))
+        mapping = coupang.deeplink(uniq)  # type: ignore[arg-type]
+        for r in todo:
+            short = mapping.get(r.canonical)
+            if short:
+                r.product_url = short
+                changed += 1
+
+    logger.info(
+        "[gear] 딥링크 — 새로 %d건, 재사용 %d건 (전체 %d건)", changed, reused, len(targets)
+    )
+    failed = len(todo) - changed
+    if failed:
+        logger.warning("[gear] %d건은 변환 실패 — 검색이 준 1회성 링크를 그대로 씁니다", failed)
+    return changed + reused
+
+
 def save(rows: list[GearRow]) -> int:
     """gear_items 에 upsert. last_seen_at 을 갱신해 '아직 파는 물건'을 표시한다."""
     if not rows:
@@ -110,6 +186,7 @@ def save(rows: list[GearRow]) -> int:
             "is_free_ship": r.is_free_ship,
             "rating": r.rating,
             "review_count": r.review_count,
+            "rank": r.rank,
             "last_seen_at": now,
         }
         for r in rows
@@ -128,6 +205,34 @@ def save(rows: list[GearRow]) -> int:
     return saved
 
 
+def sweep_out_of_range() -> int:
+    """값 범위를 벗어난 채 남아 있는 상품을 목록에서 내린다.
+
+    파서의 가격 필터는 '새로 저장되는 것'만 막는다. 규칙을 조인 뒤에도 이미
+    들어와 있던 행은 last_seen_at 이 만료될 때까지 화면에 남는다 — 실제로
+    137만원짜리 500GB SSD 가 그렇게 사흘을 버텼다. 지울 게 아니라 내려 둔다
+    (hidden). 쿠팡이 값을 고치면 다음 수집 때 되살릴 수 있게.
+    """
+    client = get_client()
+    total = 0
+    for flt, bound in (("gt", MAX_PRICE), ("lt", MIN_PRICE)):
+        try:
+            res = (
+                client.table("gear_items")
+                .update({"hidden": True})
+                .filter("price", flt, bound)
+                .eq("hidden", False)
+                .execute()
+            )
+            total += len(res.data or [])
+        except Exception:
+            logger.exception("[gear] 범위 밖 상품 정리 실패 (%s %s)", flt, bound)
+    if total:
+        logger.info("[gear] 값 범위(%s~%s원) 밖 %d건을 목록에서 내렸습니다",
+                    f"{MIN_PRICE:,}", f"{MAX_PRICE:,}", total)
+    return total
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Pakpick 주변기기 수집 (쿠팡 파트너스)")
     ap.add_argument("--dry-run", action="store_true", help="저장하지 않고 결과만 본다")
@@ -141,6 +246,7 @@ def main() -> int:
     rows = collect([args.keyword] if args.keyword else KEYWORDS)
 
     if args.dry_run:
+        logger.info("[gear] (dry-run) 딥링크 변환은 건너뜁니다")
         by_cat: dict[str, int] = {}
         for r in rows:
             by_cat[r.category] = by_cat.get(r.category, 0) + 1
@@ -152,8 +258,10 @@ def main() -> int:
         logger.info("[gear] 분류: %s", by_cat)
         return 0
 
+    to_durable_links(rows)
     saved = save(rows)
     logger.info("[gear] 저장 %d건", saved)
+    sweep_out_of_range()
     return 0 if saved or not rows else 1
 
 

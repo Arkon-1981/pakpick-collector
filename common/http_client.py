@@ -128,11 +128,16 @@ def fetch(
     timeout: int = 30,
     check_robots: bool = True,
     api: bool = False,
+    method: str = "GET",
+    json_body: dict | None = None,
 ) -> FetchResult:
     """URL 하나를 가져온다. 안전장치(간격·robots·상한·차단감지)가 자동 적용된다.
 
     api=True 면 공식 JSON API용 짧은 간격(1.5~3초)을 쓴다. HTML 스토어 페이지에는
     쓰지 말 것 — 그쪽은 사람 속도(6~12초)를 유지해야 한다.
+
+    method="POST" + json_body 는 공식 API 전용이다(쿠팡 deeplink 등). 스크래핑에
+    POST 를 쓸 일은 없고, 써서도 안 된다 — 그래서 robots 검사는 그대로 태운다.
     """
     if check_robots:
         from common import robots
@@ -146,7 +151,9 @@ def fetch(
 
         headers = dict(extra_headers) if extra_headers else {}
         try:
-            response = _session.get(url, headers=headers, timeout=timeout)
+            response = _session.request(
+                method, url, headers=headers, json=json_body, timeout=timeout
+            )
         except requests.RequestException as exc:
             logger.warning("요청 실패 (%d/%d회): %s — %s", attempt, MAX_RETRIES, url, exc)
             if attempt == MAX_RETRIES:

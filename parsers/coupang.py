@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from dataclasses import dataclass, field
 
 # --------------------------------------------------------------------------
@@ -69,19 +70,44 @@ def detect_consoles(name: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# 카테고리 판별 — 먼저 걸리는 것이 이긴다 (위쪽이 더 구체적)
+# 카테고리 판별
 # --------------------------------------------------------------------------
-# 주의: 저장장치를 오디오보다 먼저 본다. "마이크로SD" 가 "마이크"에 걸려
+# 쿠팡 상품명은 검색에 걸리려고 호환 기기·부속품 이름을 뒤에 잔뜩 붙인다.
+#   "PS5용 휴대용 케이스 … 여행 가방 콘솔 컨트롤러 헤드셋 및 …"
+# 그래서 "먼저 걸리는 단어"로 정하면 케이스가 죄다 컨트롤러가 된다
+# (실제로 119건 중 53건이 컨트롤러로 몰렸다).
+#
+# 대신 앞 HEAD_WINDOW 글자 안에서 **가장 뒤**에 나온 단어를 고른다.
+# 한국어 상품명은 "수식어 + 핵심명사" 순서라 핵심이 뒤에 오고, 검색용 나열은
+# 그보다 더 뒤에 붙기 때문이다.
+#     "PS5 듀얼센스 컨트롤러 보관 케이스"   → 케이스
+#     "호후 PS5 컨트롤러 듀얼 스탠드 충전기" → 충전기
+#
+# 쉼표 앞만 보는 규칙도 써 봤지만 뺐다. 옵션 구분자인 줄 알았던 쉼표가
+# 상품명 안에도 들어간다 — "닌텐도 스위치 1, 스위치 2 프로콘 호환 …" 은
+# 쉼표에서 자르면 "닌텐도 스위치 1" 만 남아 분류할 단어가 사라진다.
+# 창을 48로 두면 "…, 블랙, 1개, 단일상품" 같은 옵션 꼬리는 대개 창 밖이다.
+#
+# 실제 수집 159건으로 맞춘 값이다(창 40→48 로 미분류 14건→9건).
+# 바꾸기 전에 tests/test_coupang_parser.py 를 먼저 볼 것.
+HEAD_WINDOW = 48
+
+# 주의: 저장장치를 오디오보다 먼저 둔다. "마이크로SD" 가 "마이크"에 걸려
 # 헤드셋으로 분류되던 문제가 있었다. 부분 문자열로 맞추는 방식의 함정이다.
 CATEGORY_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("controller", ("컨트롤러", "패드", "조이콘", "joy-con", "joycon", "프로콘", "듀얼센스",
-                    "듀얼쇼크", "게임패드", "아케이드", "조이스틱", "핸들")),
+                    "듀얼쇼크", "게임패드", "아케이드", "조이스틱", "핸들", "레이싱휠",
+                    "쉬프터", "기어박스")),
     ("storage",    ("ssd", "microsd", "마이크로sd", "마이크로 sd", "메모리카드", "메모리 카드",
-                    "저장", "외장하드", "tf카드", "sd카드", "sd 카드")),
+                    "저장", "외장하드", "tf카드", "sd카드", "sd 카드",
+                    # Xbox 확장 카드·외장 드라이브류가 통째로 '기타'로 빠지고 있었다
+                    "스토리지", "확장 카드", "확장카드", "드라이브", "hdd", "nvme",
+                    "cfexpress", "m.2", "m2 ")),
     ("audio",      ("헤드셋", "헤드폰", "이어폰", "스피커", "사운드", "마이크")),
-    ("charge",     ("충전", "충전기", "충전독", "거치대", "크래들", "도크", "독 ", "케이블",
-                    "어댑터", "배터리", "보조배터리")),
-    ("case",       ("케이스", "파우치", "가방", "커버", "보호", "스킨", "필름", "수납")),
+    ("charge",     ("충전", "충전기", "충전독", "차저", "거치대", "크래들", "도크", "독 ",
+                    "tv독", "미니독", "케이블", "어댑터", "배터리", "보조배터리")),
+    ("case",       ("케이스", "파우치", "가방", "백팩", "커버", "보호", "스킨", "필름",
+                    "수납", "보관")),
 ]
 
 # "마이크"로 오디오라고 판단하기 전에 걸러야 하는 말들
@@ -89,15 +115,20 @@ NOT_MIC = ("마이크로sd", "마이크로 sd", "마이크로파", "마이크로
 
 
 def detect_category(name: str) -> str:
-    n = _norm(name)
+    # '+' 뒤는 끼워 주는 물건이다. "메모리카드 + SD카드 케이스" 는 메모리카드지
+    # 케이스가 아니다 — 안 자르면 뒤에 붙은 사은품이 분류를 가져간다.
+    head = _norm(name).split("+")[0][:HEAD_WINDOW]
+    best, best_pos = "etc", -1
     for cat, words in CATEGORY_RULES:
         for w in words:
-            if w not in n:
+            pos = head.rfind(w)
+            if pos < 0:
                 continue
-            if w == "마이크" and any(x in n for x in NOT_MIC):
+            if w == "마이크" and any(x in head for x in NOT_MIC):
                 continue  # 마이크로SD 같은 말
-            return cat
-    return "etc"
+            if pos > best_pos:
+                best, best_pos = cat, pos
+    return best
 
 
 # --------------------------------------------------------------------------
@@ -120,8 +151,38 @@ class GearRow:
     is_free_ship: bool = False
     rating: float | None = None
     review_count: int | None = None
+    # 쿠팡 검색 순위 (1이 제일 위). 정가를 안 주므로 기본 정렬은 이걸로 한다.
+    rank: int | None = None
+    # deeplink 변환에 쓸 '깨끗한' 상품 주소. 저장하지는 않는다.
+    canonical: str | None = field(default=None, compare=False)
     # 어떤 검색어로 찾았는지 (문제 추적용, 저장하지는 않는다)
     via: str = field(default="", compare=False)
+
+
+# 값이 말이 되는 범위. 해외 배송 리스팅 중에 500GB SSD 를 137만원에 걸어 둔 것
+# 같은 게 섞여 들어온다 — 할인 정보 사이트에 그런 값이 뜨면 신뢰를 잃는다.
+# 반대로 몇백원짜리는 액정필름 1장 같은 미끼라 목록만 지저분해진다.
+MIN_PRICE = 2_000
+MAX_PRICE = 500_000
+
+
+def canonical_url(p: dict) -> str | None:
+    """검색 응답 → 평범한 쿠팡 상품 주소.
+
+    검색이 주는 productUrl 은 link.coupang.com/re/AFFSDP?…&requestid=… 형태인데
+    requestid·traceid 는 그 응답 한 번에 딸린 값이라 며칠 뒤엔 안 통한다.
+    deeplink API 에 넣어 오래 가는 링크로 바꾸려면 '깨끗한' 주소가 필요하다.
+
+    옵션(색상·용량)까지 맞추려면 itemId·vendorItemId 가 있어야 하는데 검색 응답
+    본문에는 없고 productUrl 쿼리에만 들어 있다 — 거기서 꺼낸다.
+    """
+    pid = p.get("productId")
+    if not pid:
+        return None
+    url = f"https://www.coupang.com/vp/products/{pid}"
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(p.get("productUrl") or "").query)
+    extra = {k: q[k][0] for k in ("itemId", "vendorItemId") if q.get(k)}
+    return url + ("?" + urllib.parse.urlencode(extra) if extra else "")
 
 
 def _num(v) -> float | None:
@@ -144,7 +205,7 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
         return None  # 콘솔과 무관 → 버린다
 
     price = _num(p.get("productPrice"))
-    if price is None or price <= 0:
+    if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
         return None
 
     # 쿠팡 검색 응답에는 정가가 없는 경우가 많다. 없으면 할인율 0으로 둔다 —
@@ -169,5 +230,7 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
         is_free_ship=bool(p.get("isFreeShipping")),
         rating=_num(p.get("rating")),
         review_count=int(p["reviewCount"]) if str(p.get("reviewCount", "")).isdigit() else None,
+        rank=int(p["rank"]) if str(p.get("rank", "")).isdigit() else None,
+        canonical=canonical_url(p),
         via=via,
     )

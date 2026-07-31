@@ -1,0 +1,72 @@
+# 주변기기(쿠팡 파트너스) 수집 — 매시간.
+#
+# collect.yml 에서 떼어낸 이유
+#   게임 수집은 스토어를 크롤링해서 무겁고(닌텐도는 크롬까지 띄운다) 하루 2번이면
+#   충분하다. 주변기기는 공식 API 라 가볍고, 가격은 자주 바뀐다. 한 워크플로에
+#   묶어 두면 주변기기를 자주 돌리려고 게임 수집까지 같이 돌리게 된다.
+#
+# 왜 '실시간'이 아니라 '자주'인가
+#   화면을 열 때마다 쿠팡을 부르는 방식은 두 가지 이유로 못 쓴다.
+#     1. /products/search 는 1분당 50회. 목록 한 페이지가 키워드 23개로 만들어지니
+#        페이지뷰 하나에 23회 — 사이트 전체가 분당 2명이면 한도에 닿는다.
+#     2. productId 로 상품 하나를 조회하는 엔드포인트가 아예 없다. 키워드 검색뿐이라
+#        "이 카드의 지금 가격"을 물어볼 방법이 없다.
+#   그래서 자주 모아 두고 보여 준다. 한 번에 23회면 1분 한도 안이고,
+#   public 저장소라 Actions 시간도 따로 들지 않는다.
+#
+# 필요한 시크릿: COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY,
+#                SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+name: gear
+
+on:
+  schedule:
+    # 10분마다. 정각을 피해 7분씩 밀어 둔다 (러너가 몰리는 시간대를 비켜 간다).
+    #
+    # 왜 10분인가 — 호출 한도를 페이지뷰에서 떼어냈기 때문에 고를 수 있는 값이다.
+    # 화면은 우리 DB 만 읽고, 쿠팡 호출은 여기서만 일어난다. 그래서 방문자가
+    # 10명이든 10만명이든 호출 수가 같다.
+    #   실측(run 66): 한 바퀴 61초에 검색 23회 + 딥링크 7회 = 분당 30회.
+    #   /products/search 한도가 분당 50회이니 60% 선이다.
+    # 5분으로 더 줄여도 API 는 견디지만, GitHub 예약 작업은 부하가 몰리면 밀린다
+    # — 실효 신선도는 별로 안 늘고 실행 수만 두 배가 된다.
+    - cron: "7,17,27,37,47,57 * * * *"
+  workflow_dispatch:
+
+jobs:
+  gear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # 앞 실행이 안 끝났으면 겹쳐 돌리지 않는다 (쿠팡에 2배 요청이 가는 것을 차단)
+    concurrency:
+      group: gear
+      cancel-in-progress: false
+    # 시크릿을 잡 단위 env 로 올린다. `if:` 조건에서는 secrets 컨텍스트를 쓸 수 없고
+    # (워크플로 파싱 자체가 실패한다) env 컨텍스트는 쓸 수 있다.
+    env:
+      COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+      COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+    steps:
+      - name: 코드 내려받기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 설치
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      # 키가 없으면 조용히 건너뛴다 — 매시간 빨간불이 뜨면 진짜 실패를 못 알아본다
+      - name: 주변기기 수집
+        if: env.COUPANG_ACCESS_KEY != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/collect_gear.py
+
+      - name: 키 없음 안내
+        if: env.COUPANG_ACCESS_KEY == ''
+        run: echo "COUPANG_ACCESS_KEY 가 없어 주변기기 수집을 건너뜁니다."
