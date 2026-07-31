@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -234,6 +235,68 @@ def save(rows: list[GearRow]) -> int:
     return saved
 
 
+def backfill_deeplinks() -> int:
+    """저장돼 있는 1회성 링크를 딥링크로 바꾼다.
+
+    이번 수집에 안 잡힌 상품은 to_durable_links 가 손대지 못한다. 검색 결과에서
+    빠지면 재수집이 안 되므로, 옛날 링크를 단 채로 last_seen_at 이 만료될 때까지
+    (사흘) 목록에 남는다. 실제로 그 카드를 누른 이용자가 "사용권한이 없습니다"를
+    봤다 — 링크의 clickBeacon 생성 시각이 첫 딥링크보다 37분 앞섰다.
+
+    itemId·vendorItemId 는 옛 링크의 쿼리에 들어 있으니 거기서 되살린다.
+    """
+    try:
+        res = (
+            get_client()
+            .table("gear_items")
+            .select("id,product_url")
+            .eq("shop", "coupang")
+            .eq("hidden", False)
+            .not_.like("product_url", "%link.coupang.com/a/%")
+            .execute()
+        )
+    except Exception:
+        logger.exception("[gear] 옛 링크 조회 실패")
+        return 0
+
+    stale = res.data or []
+    if not stale:
+        return 0
+
+    # 옛 링크(/re/AFFSDP?pageKey=…&itemId=…)에서 평범한 상품 주소를 되살린다
+    wanted: dict[int, str] = {}
+    for r in stale:
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(r["product_url"]).query)
+        pid = (q.get("pageKey") or [None])[0]
+        if not pid:
+            continue
+        extra = {k: q[k][0] for k in ("itemId", "vendorItemId") if q.get(k)}
+        wanted[r["id"]] = (
+            f"https://www.coupang.com/vp/products/{pid}"
+            + ("?" + urllib.parse.urlencode(extra) if extra else "")
+        )
+
+    if not wanted:
+        logger.warning("[gear] 옛 링크 %d건에서 상품 주소를 못 읽었습니다", len(stale))
+        return 0
+
+    mapping = coupang.deeplink(list(dict.fromkeys(wanted.values())))
+    client = get_client()
+    fixed = 0
+    for row_id, canon in wanted.items():
+        short = mapping.get(canon)
+        if not short:
+            continue
+        try:
+            client.table("gear_items").update({"product_url": short}).eq("id", row_id).execute()
+            fixed += 1
+        except Exception:
+            logger.exception("[gear] 링크 교체 실패 (id=%s)", row_id)
+
+    logger.info("[gear] 옛 링크 정리 — %d/%d건 딥링크로 교체", fixed, len(wanted))
+    return fixed
+
+
 def mark_goldbox(rows: list[GearRow]) -> int:
     """오늘 골드박스에 오른 상품에 goldbox_at 을 찍는다.
 
@@ -339,6 +402,7 @@ def main() -> int:
     saved = save(rows)
     logger.info("[gear] 저장 %d건", saved)
     mark_goldbox(rows)
+    backfill_deeplinks()
     sweep_out_of_range()
     return 0 if saved or not rows else 1
 
