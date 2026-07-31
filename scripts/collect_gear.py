@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import coupang                       # noqa: E402
 from common.logging_util import get_logger       # noqa: E402
 from db.client import get_client                 # noqa: E402
-from parsers.coupang import GearRow, to_row      # noqa: E402
+from parsers.coupang import MAX_PRICE, MIN_PRICE, GearRow, to_row  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -136,6 +136,34 @@ def save(rows: list[GearRow]) -> int:
     return saved
 
 
+def sweep_out_of_range() -> int:
+    """값 범위를 벗어난 채 남아 있는 상품을 목록에서 내린다.
+
+    파서의 가격 필터는 '새로 저장되는 것'만 막는다. 규칙을 조인 뒤에도 이미
+    들어와 있던 행은 last_seen_at 이 만료될 때까지 화면에 남는다 — 실제로
+    137만원짜리 500GB SSD 가 그렇게 사흘을 버텼다. 지울 게 아니라 내려 둔다
+    (hidden). 쿠팡이 값을 고치면 다음 수집 때 되살릴 수 있게.
+    """
+    client = get_client()
+    total = 0
+    for flt, bound in (("gt", MAX_PRICE), ("lt", MIN_PRICE)):
+        try:
+            res = (
+                client.table("gear_items")
+                .update({"hidden": True})
+                .filter("price", flt, bound)
+                .eq("hidden", False)
+                .execute()
+            )
+            total += len(res.data or [])
+        except Exception:
+            logger.exception("[gear] 범위 밖 상품 정리 실패 (%s %s)", flt, bound)
+    if total:
+        logger.info("[gear] 값 범위(%s~%s원) 밖 %d건을 목록에서 내렸습니다",
+                    f"{MIN_PRICE:,}", f"{MAX_PRICE:,}", total)
+    return total
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Pakpick 주변기기 수집 (쿠팡 파트너스)")
     ap.add_argument("--dry-run", action="store_true", help="저장하지 않고 결과만 본다")
@@ -162,6 +190,7 @@ def main() -> int:
 
     saved = save(rows)
     logger.info("[gear] 저장 %d건", saved)
+    sweep_out_of_range()
     return 0 if saved or not rows else 1
 
 
