@@ -189,8 +189,16 @@ def fetch_candidates(limit: int) -> list[dict]:
     done: set[int] = set()
     retry_before = (datetime.now(timezone.utc) - timedelta(days=RETRY_AFTER_DAYS)).isoformat()
     for offset in range(0, 100_000, 1000):
-        page = _sb("game_meta?select=store_item_id,igdb_id,enriched_at"
-                   f"&limit=1000&offset={offset}") or []
+        try:
+            page = _sb("game_meta?select=store_item_id,igdb_id,enriched_at"
+                       f"&limit=1000&offset={offset}") or []
+        except requests.exceptions.HTTPError as exc:
+            # 테이블이 아직 없으면(011 SQL 미실행) 전부 후보로 본다.
+            # dry-run 매칭 확인은 되지만 실제 저장은 SQL 실행 후에만 가능하다.
+            if exc.response is not None and exc.response.status_code == 404:
+                print("※ game_meta 테이블 없음 — 011 SQL 실행 전에는 저장이 실패합니다")
+                break
+            raise
         for row in page:
             # 성공분은 계속 제외, 실패분은 30일 지나면 다시 후보가 된다
             if row["igdb_id"] is not None or row["enriched_at"] > retry_before:
