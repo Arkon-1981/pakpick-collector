@@ -83,6 +83,10 @@ def norm(s: str) -> str:
     """비교용 정규화: 소문자, 기호 제거, 판본 표기 제거, 로마 숫자 → 아라비아."""
     s = unicodedata.normalize("NFKC", (s or "").lower())
     s = re.sub(r"[®™©:：\-–—_'’!?.,·/|&]", " ", s)
+    # 'PERSONA5' vs 'Persona 5' 처럼 숫자 붙임 표기 차이를 없앤다 (양쪽에 똑같이
+    # 적용되는 등호 비교 전용이라, 얼마나 잘게 쪼개지든 판정은 대칭으로 안전하다)
+    s = re.sub(r"(?<=[^\d\s])(?=\d)", " ", s)
+    s = re.sub(r"(?<=\d)(?=[^\d\s])", " ", s)
     for w in EDITION_WORDS:
         s = s.replace(w, " ")
     words = [ROMAN.get(w, w) for w in s.split()]
