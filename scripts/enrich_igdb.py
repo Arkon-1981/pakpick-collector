@@ -72,6 +72,8 @@ def clean_title(raw: str) -> str:
     t = raw or ""
     t = re.sub(r"^발매\s*\d{2}\.\d{1,2}\.\d{1,2}\s*", "", t)
     t = re.sub(r"^PS[45]®?용\s+", "", t, flags=re.IGNORECASE)
+    # 엑스박스 기종 나열 접두어: "Xbox One & Xbox Series X|S용 …"
+    t = re.sub(r"^Xbox[^용]{0,40}용\s+", "", t)
     t = re.sub(r"\s*\([^)]*(한국어|영어|일본어|중국어|태국어)[^)]*\)", "", t)
     t = re.sub(r"\s*(for Nintendo Switch( 2)?|Nintendo Switch( 2)? Edition)\s*$", "", t, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", t).strip()
@@ -80,17 +82,42 @@ def clean_title(raw: str) -> str:
 def norm(s: str) -> str:
     """비교용 정규화: 소문자, 기호 제거, 판본 표기 제거, 로마 숫자 → 아라비아."""
     s = unicodedata.normalize("NFKC", (s or "").lower())
-    s = re.sub(r"[®™©:：\-–—_'’!?.,·]", " ", s)
+    s = re.sub(r"[®™©:：\-–—_'’!?.,·/|&]", " ", s)
     for w in EDITION_WORDS:
         s = s.replace(w, " ")
     words = [ROMAN.get(w, w) for w in s.split()]
     return " ".join(words)
 
 
-def english_part(title: str) -> str | None:
-    """'페르소나3 리로드(Persona 3 Reload)' 처럼 괄호 안 영문 제목을 뽑는다."""
+def search_queries(title: str) -> list[str]:
+    """한 제목에서 시도할 검색어들 (순서대로, 중복 제거).
+
+    스토어 제목은 'Palworld / 팰월드'(병기), '커세어 코브 Corsair Cove'(붙임),
+    '페르소나3 리로드(Persona 3 Reload)'(괄호) 처럼 한글·영문이 섞여 있는데
+    IGDB 검색은 이런 혼합 문자열에 약하다. 조각을 나눠 차례로 찔러 본다.
+    검색어가 달라도 매칭 판정은 항상 원제목 기준(호출부)이라 오매칭 위험은 없다.
+    """
+    qs = [title]
+    # 괄호 안 영문 제목
     m = re.search(r"\(([A-Za-z0-9][^)]{3,60})\)", title)
-    return m.group(1).strip() if m else None
+    if m:
+        qs.append(m.group(1).strip())
+    # 슬래시·가운뎃점 병기 → 각 조각
+    if re.search(r"\s[/·]\s?", title):
+        qs += [p.strip() for p in re.split(r"\s[/·]\s?", title) if len(p.strip()) >= 2]
+    # 한영 붙임 → 가장 긴 영문 구간 (4자 이상, 알파벳 포함)
+    runs = [r.strip(" :") for r in re.findall(r"[A-Za-z0-9][A-Za-z0-9 :'!.&-]{3,}", title)]
+    runs = [r for r in runs if re.search(r"[A-Za-z]{3}", r)]
+    if runs:
+        qs.append(max(runs, key=len))
+    # ®™ 류는 검색 정확도만 떨어뜨린다 — 모든 검색어에서 제거
+    out, seen = [], set()
+    for q in qs:
+        q = re.sub(r"[®™©]", "", q).strip()
+        if len(q) >= 2 and q not in seen:
+            seen.add(q)
+            out.append(q)
+    return out
 
 
 # ------------------------------------------------------------------
@@ -131,37 +158,46 @@ def search_game(title: str) -> tuple[dict | None, str]:
     """제목으로 게임을 찾는다. (게임, 신뢰도) — 못 찾으면 (None, 'none').
 
     IGDB search 는 별칭(alternative_names — 한국어 제목 포함)도 뒤져 주므로
-    한국어 스토어 제목도 상당수 잡힌다. 후보 중에서는 정규화 제목이
-    이름/별칭과 정확히 일치하는 것만 받아들인다.
+    한국어 스토어 제목도 상당수 잡힌다. 판정은 정규화 후 완전 일치만:
+    원제목과 일치하면 exact, 병기 조각('Palworld / 팰월드'의 'Palworld',
+    괄호 안 영문 등)과 일치하면 fuzzy. 조각은 같은 게임의 다른 표기라
+    부분 문자열 매칭과 달리 엉뚱한 게임이 붙지 않는다.
     """
-    esc = title.replace('"', '\\"')
-    rows = igdb_query("games", (
-        f'search "{esc}"; '
-        "fields id,name,rating,rating_count,aggregated_rating,"
-        "aggregated_rating_count,alternative_names.name,category; limit 8;"
-    ))
-    time.sleep(REQUEST_GAP)
     want = norm(title)
     if not want:
         return None, "none"
+    variants = search_queries(title)
+    accept = {norm(v) for v in variants if norm(v)}
 
-    for row in rows:
-        names = [row.get("name") or ""]
-        names += [a.get("name") or "" for a in row.get("alternative_names") or []]
-        if any(norm(n) == want for n in names):
-            return row, "exact"
+    for query in variants:
+        esc = query.replace('"', '\\"')
+        rows = igdb_query("games", (
+            f'search "{esc}"; '
+            "fields id,name,rating,rating_count,aggregated_rating,"
+            "aggregated_rating_count,alternative_names.name,category; limit 8;"
+        ))
+        time.sleep(REQUEST_GAP)
 
-    # 정확 일치가 없으면: 후보가 하나뿐이고 토큰이 포함 관계일 때만 (보수적)
-    if len(rows) == 1:
-        row = rows[0]
-        names = [row.get("name") or ""] + [
-            a.get("name") or "" for a in row.get("alternative_names") or []
-        ]
-        w = set(want.split())
-        for n in names:
-            c = set(norm(n).split())
-            if w and c and (w <= c or c <= w):
+        for row in rows:
+            names = [row.get("name") or ""]
+            names += [a.get("name") or "" for a in row.get("alternative_names") or []]
+            keys = {norm(n) for n in names}
+            if want in keys:
+                return row, "exact"
+            if accept & keys:
                 return row, "fuzzy"
+
+        # 완전 일치가 없으면: 후보가 하나뿐이고 토큰이 포함 관계일 때만 (보수적)
+        if len(rows) == 1:
+            row = rows[0]
+            names = [row.get("name") or ""] + [
+                a.get("name") or "" for a in row.get("alternative_names") or []
+            ]
+            w = set(want.split())
+            for n in names:
+                c = set(norm(n).split())
+                if w and c and (w <= c or c <= w):
+                    return row, "fuzzy"
     return None, "none"
 
 
@@ -258,8 +294,6 @@ def main() -> None:
     misses: list[dict] = []
     for c in cands:
         game, conf = search_game(c["title"])
-        if game is None and (en := english_part(c["title"])):
-            game, conf = search_game(en)   # 괄호 안 영문 제목으로 한 번 더
         if game is None:
             misses.append(c)
             print(f"  · miss: [{c['platform']}] {c['title'][:44]}")
