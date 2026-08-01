@@ -211,12 +211,13 @@ def fetch_candidates(limit: int) -> list[dict]:
     # current_data 통째로는 받지 않는다 — PS 행 하나가 수십 KB (fetch_item_meta 와 같은 이유)
     for offset in range(0, 10_000, 1000):
         rows = _sb(
-            "store_items?select=id,title,platform,content_type,"
-            "rank:current_data->popular_rank"
+            "store_items?select=id,title,platform,"
+            "ctype:current_data->>content_type,rank:current_data->popular_rank"
             f"&last_seen_at=gte.{iso}&order=id.asc&limit=1000&offset={offset}"
         ) or []
         for r in rows:
-            if r["id"] in done or (r.get("content_type") == "addon"):
+            # DLC(addon)는 게임 본편이 아니라 IGDB 매칭 대상이 아니다
+            if r["id"] in done or (r.get("ctype") == "addon"):
                 continue
             title = clean_title(r.get("title") or "")
             if not title:
