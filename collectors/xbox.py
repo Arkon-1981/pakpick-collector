@@ -53,6 +53,9 @@ RELEASE_PAGES = [
     ("upcoming", "https://www.microsoft.com/ko-kr/store/coming-soon/games/xbox"),
     ("new", "https://www.microsoft.com/ko-kr/store/new/games/xbox"),
     ("free", "https://www.microsoft.com/ko-kr/store/top-free/games/xbox"),
+    # 인기(유료 판매 상위) — top-free 와 같은 방식의 페이지라 같은 파싱이 먹는다.
+    # 마지막에 둔다: kinds 는 먼저 잡힌 종류를 유지하므로 신작·무료 표시가 이긴다.
+    ("popular", "https://www.microsoft.com/ko-kr/store/top-paid/games/xbox"),
 ]
 
 # ----- 2단계 -----
@@ -88,7 +91,7 @@ class XboxCollector(BaseCollector):
         # 엑스박스 목록 API가 할인만 주는 게 아니어서 신작·무료가 거의 다 이미 받은
         # 상품이었다 → 전부 건너뛰어져 content_kind 가 하나도 안 붙었다
         # (실측: new 50/50, free 50/50 이 중복 처리되어 신작·무료 탭이 비었다).
-        kinds = self._fetch_release_kinds()
+        kinds, popular_ranks = self._fetch_release_kinds()
 
         # 목록에 없던 신작·무료만 뒤에 붙여, 상품 하나당 상세 조회는 한 번만 한다
         known = set(product_ids)
@@ -98,16 +101,21 @@ class XboxCollector(BaseCollector):
 
         for i in range(0, len(all_ids), CATALOG_BATCH):
             batch = all_ids[i : i + CATALOG_BATCH]
-            self._fetch_catalog_batch(batch, batch_index=i // CATALOG_BATCH, kinds=kinds)
+            self._fetch_catalog_batch(
+                batch, batch_index=i // CATALOG_BATCH,
+                kinds=kinds, popular_ranks=popular_ranks,
+            )
 
-    def _fetch_release_kinds(self) -> dict[str, str]:
-        """microsoft.com 스토어의 신작·출시예정·무료 목록에서 {상품ID: 종류}를 만든다.
+    def _fetch_release_kinds(self) -> tuple[dict[str, str], dict[str, int]]:
+        """microsoft.com 스토어의 신작·출시예정·무료·인기 목록에서
+        ({상품ID: 종류}, {상품ID: 인기 순위}) 를 만든다.
 
         상세는 받지 않는다 — 여기서는 '무엇이 신작인가'만 알아내고, 실제 상세 조회는
         할인 목록과 합쳐 한 번에 처리한다(같은 상품을 두 번 받지 않기 위해).
         먼저 나온 종류를 유지한다(출시예정 → 신작 → 무료 순).
         """
         kinds: dict[str, str] = {}
+        ranks: dict[str, int] = {}
         for kind, url in RELEASE_PAGES:
             try:
                 result = fetch(url)
@@ -127,12 +135,15 @@ class XboxCollector(BaseCollector):
             # displaycatalog는 대문자 BigId를 쓰는데 스토어 페이지는 소문자로 준다
             found = [i.upper() for i in dict.fromkeys(PRODUCT_ID_ANY_CASE_RE.findall(result.text))]
             added = 0
-            for pid in found:
+            for idx, pid in enumerate(found):
+                if kind == "popular":
+                    # 인기는 순위가 곧 정보다. 페이지의 나열 순서 = 판매 순위.
+                    ranks[pid] = idx + 1
                 if pid not in kinds:
                     kinds[pid] = kind
                     added += 1
             logger.info("[xbox] %s 상품 ID %d개 (신규 %d)", kind, len(found), added)
-        return kinds
+        return kinds, ranks
 
     # =================================================================
     # 1단계: 할인 상품 ID 목록 — 여러 경로를 순서대로 시도
@@ -259,7 +270,9 @@ class XboxCollector(BaseCollector):
     # =================================================================
 
     def _fetch_catalog_batch(
-        self, big_ids: list[str], *, batch_index: int, kinds: dict[str, str] | None = None
+        self, big_ids: list[str], *, batch_index: int,
+        kinds: dict[str, str] | None = None,
+        popular_ranks: dict[str, int] | None = None,
     ) -> None:
         """상품 ID 묶음의 상세를 받아 저장한다.
 
@@ -289,4 +302,7 @@ class XboxCollector(BaseCollector):
             kind = (kinds or {}).get(item.store_product_id)
             if kind:
                 item.extracted_data["content_kind"] = kind
+            rank = (popular_ranks or {}).get(item.store_product_id)
+            if rank is not None:
+                item.extracted_data["popular_rank"] = rank
             self.save_item(item, raw_doc_id)

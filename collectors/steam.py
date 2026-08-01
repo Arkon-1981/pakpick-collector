@@ -16,6 +16,7 @@ from collectors.base import BaseCollector, ParsedItem
 from common import config
 from common.http_client import fetch
 from common.logging_util import get_logger
+from db import repository
 from parsers.steam import (
     count_rows,
     parse_featured_items,
@@ -49,6 +50,15 @@ F2P_URL = (
     "?query&start=0&count=50&category1=998&maxprice=free"
     "&filter=globaltopsellers&cc=kr&l=koreana&infinite=1"
 )
+# 인기(판매 상위) — 할인 검색과 같은 페이지에서 specials=1(할인만) 조건만 뺀 것.
+# 파서도 같은 것을 쓴다. 상위 100위면 '인기 탭'으로 충분하고 요청은 1회다.
+POPULAR_URL = (
+    "https://store.steampowered.com/search/results/"
+    "?query&start=0&count=100"
+    "&filter=globaltopsellers&category1=998"
+    "&cc=kr&l=koreana&infinite=1"
+)
+
 # 배치 보강 API — appid 50개를 한 번에 받아 출시일·할인 종료일·퍼블리셔·스크린샷·
 # 리뷰 요약·한국어 지원 여부를 모두 준다. 예전에는 상품당 appdetails를 1회씩 불러
 # 스크린샷만 받았는데(150개 = 요청 150회), 이제 3회면 같은 일을 하고 정보는 더 많다.
@@ -126,9 +136,12 @@ class SteamCollector(BaseCollector):
             self.pages_found, self.products_found, total_count,
         )
 
-        # 할인 외 소스: 신작 / 출시예정 / 무료 배포 (실패해도 할인 수집분은 보존)
+        # 할인 외 소스: 신작 / 출시예정 / 무료 배포 / 인기 (실패해도 할인 수집분은 보존)
         self._collect_featured()
         self._collect_free()
+        # 인기는 맨 마지막 — upsert 가 current_data 를 통째로 덮어쓰므로,
+        # 같은 실행의 앞 단계가 인기 표시를 지우지 않게 순서로 보장한다.
+        self._collect_popular()
 
     def _collect_featured(self) -> None:
         """신작(new_releases)·출시예정(coming_soon)을 featuredcategories에서 가져온다."""
@@ -183,6 +196,44 @@ class SteamCollector(BaseCollector):
                 item.extracted_data["is_f2p"] = f2p  # 상시 무료 / 기간 한정 구분
                 self.save_item(item, raw_doc_id)
             logger.info("[steam] %s %d개 저장", label, len(items))
+
+    def _collect_popular(self) -> None:
+        """판매 상위(인기). 순위가 곧 정보라 popular_rank 를 함께 저장한다.
+
+        신작·무료 표시가 있는 상품이 인기에도 오르면 표시가 지워지는 문제가 있다
+        (upsert 가 current_data 를 통째로 덮어씀) — 기존 content_kind 를 읽어 와
+        다시 실어 준다. 순위에서 빠진 상품은 다른 목록이 다시 저장하면서 자연히
+        popular_rank 가 지워지고, 어디에도 안 잡히면 신선도 창에서 밀려난다.
+        """
+        try:
+            result = fetch(POPULAR_URL, extra_headers={"Accept": "application/json"}, api=True)
+            if result.status_code != 200:
+                self.record_parse_error(POPULAR_URL, f"인기 검색 상태코드 {result.status_code}")
+                return
+            raw_doc_id = self.save_raw(
+                result, document_type="list", filename="popular.json",
+                content_type="application/json",
+            )
+            self.pages_found += 1
+            data = json.loads(result.text)
+        except Exception as exc:
+            logger.warning("[steam] 인기 수집 실패: %s", exc)
+            return
+
+        items = parse_search_results_html(data.get("results_html") or "")
+        self._enrich(items)
+        keep = repository.fetch_item_meta(
+            self.platform, config.STORE_REGION, ["content_kind", "is_f2p"]
+        )
+        for rank, item in enumerate(items, start=1):
+            prev = keep.get(item.store_product_id) or {}
+            if prev.get("content_kind"):
+                item.extracted_data["content_kind"] = prev["content_kind"]
+                if prev.get("is_f2p") is not None:
+                    item.extracted_data["is_f2p"] = prev["is_f2p"]
+            item.extracted_data["popular_rank"] = rank
+            self.save_item(item, raw_doc_id)
+        logger.info("[steam] 인기(판매 상위) %d개 저장", len(items))
 
     # ------------------------------------------------------------------
     # 배치 보강
