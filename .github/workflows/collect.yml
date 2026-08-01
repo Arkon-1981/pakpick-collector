@@ -134,8 +134,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        # 임시: bestcategories 탐사. 결과 확인 후 원복한다 (브랜치에서만 실행됨)
-        run: python scripts/probe_coupang_categories.py
+        run: python scripts/collect_gear.py
 
       - name: 키 없음 안내
         if: env.COUPANG_ACCESS_KEY == ''

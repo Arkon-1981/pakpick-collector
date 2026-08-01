@@ -136,6 +136,11 @@ row_t = to_row(product("마리오 카트 8 디럭스 닌텐도 스위치", 52_00
 check("범주 단어 없으면 힌트를 쓴다", row_t is not None and row_t.category, "title")
 row_h = to_row(product("닌텐도 스위치 케이스 하드", 15_000), hint="title")
 check("이름 규칙이 있으면 힌트를 무시한다", row_h is not None and row_h.category, "case")
+# 프랜차이즈 검색에 딸려 오는 굿즈 — 타이틀 힌트를 받으면 안 된다
+row_g = to_row(product("젤다의 전설 링크 아미보 닌텐도 스위치", 24_000), hint="title")
+check("아미보는 타이틀 힌트를 안 받는다", row_g is not None and row_g.category, "etc")
+row_g2 = to_row(product("닌텐도 스위치 마리오 피규어 세트", 18_000), hint="title")
+check("피규어도 타이틀 힌트를 안 받는다", row_g2 is not None and row_g2.category, "etc")
 
 # 정가를 주는 날이 오면 할인율을 제대로 계산해야 한다
 row2 = to_row(product("엑스박스 무선 컨트롤러", 54900, productBasePrice=79800))

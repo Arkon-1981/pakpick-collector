@@ -186,6 +186,15 @@ def price_range(category: str) -> tuple[int, int]:
     return PRICE_RANGES.get(category, (MIN_PRICE, MAX_PRICE))
 
 
+# 타이틀 힌트를 받으면 안 되는 것들. "닌텐도 스위치 젤다" 같은 프랜차이즈 검색은
+# 게임과 함께 아미보·피규어·굿즈를 물어 오는데, 이름에 범주 단어가 없어서
+# 힌트를 그대로 받으면 굿즈가 게임 타이틀로 분류된다.
+TITLE_HINT_DENY = (
+    "아미보", "amiibo", "피규어", "굿즈", "인형", "쿠션", "키링", "포스터",
+    "아트북", "설정집", "가이드북", "공략집", "ost", "사운드트랙",
+)
+
+
 def canonical_url(p: dict) -> str | None:
     """검색 응답 → 평범한 쿠팡 상품 주소.
 
@@ -232,7 +241,9 @@ def to_row(p: dict, *, via: str = "", hint: str | None = None) -> GearRow | None
 
     category = detect_category(name)
     if category == "etc" and hint:
-        category = hint
+        n = _norm(name)
+        if not (hint == "title" and any(w in n for w in TITLE_HINT_DENY)):
+            category = hint
 
     # 가격 범위는 카테고리에 따라 다르다 — 본체는 100만원이 정상이고
     # 주변기기는 100만원이 이상하다. 그래서 분류를 가격 검사보다 먼저 한다.
