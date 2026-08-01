@@ -1,0 +1,55 @@
+# 하루 1회 IGDB 메타 보강 — 평점(평론가/이용자) + 플레이 타임.
+#
+# 준비 (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (수집 워크플로와 동일)
+#   TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET    (dev.twitch.tv/console/apps 앱 등록)
+#
+# 수동 실행: Actions 탭 → "igdb" → Run workflow (개수 조절 가능)
+
+name: igdb
+
+on:
+  schedule:
+    # 매일 한국시간 04:10 (UTC 19:10) — 수집 이후, AI 리뷰(04:40) 이전
+    - cron: "10 19 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "이번에 보강할 최대 개수"
+        required: false
+        default: "200"
+      dry_run:
+        description: "true 면 저장하지 않고 매칭 결과만 출력"
+        required: false
+        default: "false"
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: igdb
+      cancel-in-progress: false
+    # 키가 없으면 조용히 건너뛴다 — 보강 때문에 액션이 빨간색이 되면 안 된다
+    env:
+      TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+      TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install requests
+      - name: IGDB 보강
+        if: env.TWITCH_CLIENT_ID != ''
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: >
+          python scripts/enrich_igdb.py
+          --limit ${{ github.event.inputs.limit || '200' }}
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+      - name: 키 없음 안내
+        if: env.TWITCH_CLIENT_ID == ''
+        run: echo "TWITCH_CLIENT_ID 가 없어 IGDB 보강을 건너뜁니다."
