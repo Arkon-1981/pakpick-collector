@@ -95,6 +95,12 @@ HEAD_WINDOW = 48
 # 주의: 저장장치를 오디오보다 먼저 둔다. "마이크로SD" 가 "마이크"에 걸려
 # 헤드셋으로 분류되던 문제가 있었다. 부분 문자열로 맞추는 방식의 함정이다.
 CATEGORY_RULES: list[tuple[str, tuple[str, ...]]] = [
+    # 기기 본체. "콘솔"은 못 쓴다 — 주변기기 이름에 "콘솔용"이 수시로 들어간다.
+    ("console",    ("본체",)),
+    # 게임 타이틀(패키지판). 상품명에 범주 단어가 아예 없는 경우가 많아
+    # ("마리오 카트 8 디럭스 닌텐도 스위치") 검색어 힌트(to_row 의 hint)가 보완한다.
+    ("title",      ("타이틀", "게임칩", "게임 칩", "카트리지", "게임팩", "한글판",
+                    "패키지판", "합본팩")),
     ("controller", ("컨트롤러", "패드", "조이콘", "joy-con", "joycon", "프로콘", "듀얼센스",
                     "듀얼쇼크", "게임패드", "아케이드", "조이스틱", "핸들", "레이싱휠",
                     "쉬프터", "기어박스")),
@@ -167,6 +173,18 @@ class GearRow:
 MIN_PRICE = 2_000
 MAX_PRICE = 500_000
 
+# 범위는 카테고리마다 다르다. 본체는 PS5 Pro 정가가 111.8만원이라 주변기기
+# 상한(50만)을 그대로 쓰면 본체가 전부 버려진다. 타이틀은 8.9만원(신작 정가)을
+# 크게 넘으면 한정판 굿즈 묶음이지 게임이 아니다.
+PRICE_RANGES: dict[str, tuple[int, int]] = {
+    "console": (80_000, 1_600_000),   # 하한 8만: '본체'가 이름에 붙은 스킨·괘 거르기
+    "title":   (5_000, 150_000),
+}
+
+
+def price_range(category: str) -> tuple[int, int]:
+    return PRICE_RANGES.get(category, (MIN_PRICE, MAX_PRICE))
+
 
 def canonical_url(p: dict) -> str | None:
     """검색 응답 → 평범한 쿠팡 상품 주소.
@@ -194,8 +212,14 @@ def _num(v) -> float | None:
         return None
 
 
-def to_row(p: dict, *, via: str = "") -> GearRow | None:
-    """쿠팡 상품 dict → GearRow. 콘솔용이 아니면 None."""
+def to_row(p: dict, *, via: str = "", hint: str | None = None) -> GearRow | None:
+    """쿠팡 상품 dict → GearRow. 콘솔용이 아니면 None.
+
+    hint 는 검색어가 말해 주는 카테고리다("PS5 본체"로 찾았으면 console).
+    상품명 규칙이 아무것도 못 찾았을 때(etc)만 쓴다 — 이름에 "케이스"가 보이면
+    검색어가 뭐든 케이스가 맞다. 게임 타이틀은 상품명에 범주 단어가 아예 없는
+    경우가 많아("마리오 카트 8 디럭스 닌텐도 스위치") 힌트가 꼭 필요하다.
+    """
     name = p.get("productName") or ""
     pid = p.get("productId")
     url = p.get("productUrl")
@@ -206,8 +230,15 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
     if not consoles:
         return None  # 콘솔과 무관 → 버린다
 
+    category = detect_category(name)
+    if category == "etc" and hint:
+        category = hint
+
+    # 가격 범위는 카테고리에 따라 다르다 — 본체는 100만원이 정상이고
+    # 주변기기는 100만원이 이상하다. 그래서 분류를 가격 검사보다 먼저 한다.
     price = _num(p.get("productPrice"))
-    if price is None or not (MIN_PRICE <= price <= MAX_PRICE):
+    lo, hi = price_range(category)
+    if price is None or not (lo <= price <= hi):
         return None
 
     # 쿠팡 검색 응답에는 정가가 없는 경우가 많다. 없으면 할인율 0으로 둔다 —
@@ -221,7 +252,7 @@ def to_row(p: dict, *, via: str = "") -> GearRow | None:
         shop="coupang",
         shop_product_id=str(pid),
         name=name.strip(),
-        category=detect_category(name),
+        category=category,
         consoles=consoles,
         price=price,
         base_price=base,

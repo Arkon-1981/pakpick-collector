@@ -68,6 +68,13 @@ CATEGORY_CASES = [
     ("조이트론 PS5 시스템 싱글 차저", "charge"),
     ("겜맥 닌텐도 스위치 미니 TV독", "charge"),
     ("호후 PS5 휴대용 게임 콘솔 보관 숄더 올백팩, 블랙, 1개, 단일상품", "case"),
+    # 본체 — "콘솔"은 주변기기 이름에 "콘솔용"으로 수시로 들어가서 못 쓴다
+    ("플레이스테이션 5 프로 본체 디스크 에디션", "console"),
+    ("닌텐도 스위치2 본체 + 마리오 카트 월드 세트", "console"),
+    # 게임 타이틀
+    ("젤다의 전설 왕국의 눈물 닌텐도 스위치 타이틀", "title"),
+    ("닌텐도 스위치 슈퍼 마리오 파티 잼버리 게임칩", "title"),
+    ("PS5 갓 오브 워 라그나로크 한글판", "title"),
 ]
 
 print("— 카테고리")
@@ -114,6 +121,21 @@ check(f"{MAX_PRICE:,}원 초과는 버린다",
 check(f"{MIN_PRICE:,}원 미만은 버린다",
       to_row(product("닌텐도 스위치 강화유리 액정보호필름", MIN_PRICE - 1)), None)
 check("경계값은 남긴다", to_row(product("닌텐도 스위치 케이스", MAX_PRICE)) is not None, True)
+
+# 카테고리별 가격 범위 — 본체는 100만원이 정상이고, 주변기기는 그 값이면 버려야 한다
+row_con = to_row(product("플레이스테이션 5 프로 본체", 1_118_000))
+check("본체 111만원은 남긴다", row_con is not None and row_con.category == "console", True)
+check("주변기기 111만원은 버린다", to_row(product("PS5 확장 SSD 히트싱크", 1_118_000)), None)
+# "본체 스킨"은 뒤에 오는 '스킨'이 이겨 케이스로 분류된다 — 버리지 않고 제자리에 둔다
+row_skin = to_row(product("PS5 본체 스티커 스킨 세트", 15_000))
+check("'본체 스킨'은 케이스로 분류", row_skin is not None and row_skin.category, "case")
+check("진짜 본체인데 8만원 미만이면 버린다 (미끼 리스팅)",
+      to_row(product("닌텐도 스위치 2 본체", 49_000)), None)
+# 검색어 힌트 — 상품명에 범주 단어가 없는 게임 타이틀
+row_t = to_row(product("마리오 카트 8 디럭스 닌텐도 스위치", 52_000), hint="title")
+check("범주 단어 없으면 힌트를 쓴다", row_t is not None and row_t.category, "title")
+row_h = to_row(product("닌텐도 스위치 케이스 하드", 15_000), hint="title")
+check("이름 규칙이 있으면 힌트를 무시한다", row_h is not None and row_h.category, "case")
 
 # 정가를 주는 날이 오면 할인율을 제대로 계산해야 한다
 row2 = to_row(product("엑스박스 무선 컨트롤러", 54900, productBasePrice=79800))

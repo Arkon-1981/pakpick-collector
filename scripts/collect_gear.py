@@ -29,7 +29,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import coupang                       # noqa: E402
 from common.logging_util import get_logger       # noqa: E402
 from db.client import get_client                 # noqa: E402
-from parsers.coupang import MAX_PRICE, MIN_PRICE, GearRow, to_row  # noqa: E402
+from parsers.coupang import (  # noqa: E402
+    MAX_PRICE, MIN_PRICE, PRICE_RANGES, GearRow, to_row,
+)
 
 logger = get_logger(__name__)
 
@@ -38,19 +40,32 @@ logger = get_logger(__name__)
 # 쿠팡이 한 번에 10건만 주므로(아래 SEARCH_LIMIT 주석) 물량은 키워드 수로 늘린다.
 # 실제 수집 결과를 보고 고른 목록이다 — "게임 컨트롤러 충전기"는 6건을 받아
 # 콘솔용이 0건이라 뺐고, 저장장치가 얇아서 기기별로 나눠 넣었다.
-KEYWORDS: list[str] = [
-    # PlayStation
-    "PS5 컨트롤러", "듀얼센스 충전 거치대", "PS5 확장 SSD", "PS5 케이스 커버",
-    "PS5 헤드셋", "PS5 거치대", "듀얼센스 그립",
+# (검색어, 카테고리 힌트). 힌트는 상품명 규칙이 아무것도 못 찾을 때만 쓴다.
+# 게임 타이틀은 상품명에 범주 단어가 없는 경우가 많아 힌트가 필수다.
+KEYWORDS: list[tuple[str, str | None]] = [
+    # 본체 — 세대·모델별로 찾는다. "게임기 본체"처럼 넓히면 레트로 에뮬기가 쏟아진다.
+    ("PS5 본체", "console"), ("PS5 프로 본체", "console"),
+    ("엑스박스 시리즈X 본체", "console"), ("엑스박스 시리즈S 본체", "console"),
+    ("닌텐도 스위치 본체", "console"), ("닌텐도 스위치2 본체", "console"),
+    ("닌텐도 스위치 올레드 본체", "console"),
+    # 게임 타이틀(패키지판)
+    ("PS5 게임 타이틀", "title"), ("PS5 게임 패키지", "title"),
+    ("닌텐도 스위치 게임 타이틀", "title"), ("닌텐도 스위치2 게임 타이틀", "title"),
+    ("닌텐도 스위치 게임칩", "title"), ("엑스박스 게임 타이틀", "title"),
+    # PlayStation 주변기기
+    ("PS5 컨트롤러", None), ("듀얼센스 충전 거치대", None), ("PS5 확장 SSD", None),
+    ("PS5 케이스 커버", None), ("PS5 헤드셋", None), ("PS5 거치대", None),
+    ("듀얼센스 그립", None),
     # Xbox
-    "엑스박스 컨트롤러", "엑스박스 충전 배터리", "엑스박스 헤드셋", "엑스박스 거치대",
-    "엑스박스 확장 스토리지",
+    ("엑스박스 컨트롤러", None), ("엑스박스 충전 배터리", None), ("엑스박스 헤드셋", None),
+    ("엑스박스 거치대", None), ("엑스박스 확장 스토리지", None),
     # Nintendo Switch
-    "닌텐도 스위치 컨트롤러", "닌텐도 스위치 케이스", "닌텐도 스위치 메모리카드",
-    "닌텐도 스위치 충전 독", "조이콘 그립", "닌텐도 스위치 보호필름",
-    "닌텐도 스위치2 케이스", "닌텐도 스위치 파우치",
+    ("닌텐도 스위치 컨트롤러", None), ("닌텐도 스위치 케이스", None),
+    ("닌텐도 스위치 메모리카드", None), ("닌텐도 스위치 충전 독", None),
+    ("조이콘 그립", None), ("닌텐도 스위치 보호필름", None),
+    ("닌텐도 스위치2 케이스", None), ("닌텐도 스위치 파우치", None),
     # 공용
-    "콘솔 게임 헤드셋", "게임패드 충전 거치대",
+    ("콘솔 게임 헤드셋", None), ("게임패드 충전 거치대", None),
 ]
 
 # 쿠팡 검색은 limit=20 을 거부하고 10 까지만 받는다(2026-07 확인).
@@ -59,13 +74,13 @@ SEARCH_LIMIT = None
 UPSERT_CHUNK = 100
 
 
-def collect(keywords: list[str]) -> list[GearRow]:
+def collect(keywords: list[tuple[str, str | None]]) -> list[GearRow]:
     """키워드를 돌며 콘솔용 상품만 모은다. 같은 상품은 한 번만."""
     seen: dict[str, GearRow] = {}
     dropped = 0
     failed: list[str] = []
 
-    for kw in keywords:
+    for kw, hint in keywords:
         try:
             products = coupang.search(kw, limit=SEARCH_LIMIT)
         except coupang.CoupangError as exc:
@@ -75,7 +90,7 @@ def collect(keywords: list[str]) -> list[GearRow]:
 
         kept = 0
         for p in products:
-            row = to_row(p, via=kw)
+            row = to_row(p, via=kw, hint=hint)
             if row is None:
                 dropped += 1
                 continue
@@ -338,21 +353,25 @@ def sweep_out_of_range() -> int:
     """
     client = get_client()
     total = 0
-    for flt, bound in (("gt", MAX_PRICE), ("lt", MIN_PRICE)):
-        try:
-            res = (
-                client.table("gear_items")
-                .update({"hidden": True})
-                .filter("price", flt, bound)
-                .eq("hidden", False)
-                .execute()
-            )
-            total += len(res.data or [])
-        except Exception:
-            logger.exception("[gear] 범위 밖 상품 정리 실패 (%s %s)", flt, bound)
+    # 범위가 카테고리마다 다르다 — 본체 100만원은 정상, 주변기기 100만원은 이상.
+    special = list(PRICE_RANGES.keys())
+    checks = [(cat, *PRICE_RANGES[cat]) for cat in special] + [(None, MIN_PRICE, MAX_PRICE)]
+    for cat, lo, hi in checks:
+        for flt, bound in (("gt", hi), ("lt", lo)):
+            try:
+                q = (
+                    client.table("gear_items")
+                    .update({"hidden": True})
+                    .filter("price", flt, bound)
+                    .eq("hidden", False)
+                )
+                q = q.eq("category", cat) if cat else q.not_.in_("category", special)
+                res = q.execute()
+                total += len(res.data or [])
+            except Exception:
+                logger.exception("[gear] 범위 밖 상품 정리 실패 (%s %s %s)", cat, flt, bound)
     if total:
-        logger.info("[gear] 값 범위(%s~%s원) 밖 %d건을 목록에서 내렸습니다",
-                    f"{MIN_PRICE:,}", f"{MAX_PRICE:,}", total)
+        logger.info("[gear] 값 범위 밖 %d건을 목록에서 내렸습니다", total)
     return total
 
 
@@ -366,7 +385,7 @@ def main() -> int:
         logger.error("COUPANG_ACCESS_KEY / COUPANG_SECRET_KEY 가 없습니다")
         return 1
 
-    rows = collect([args.keyword] if args.keyword else KEYWORDS)
+    rows = collect([(args.keyword, None)] if args.keyword else KEYWORDS)
 
     # 골드박스는 키워드 하나만 볼 때는 건너뛴다 (그건 검색 디버깅용이다)
     if not args.keyword:
