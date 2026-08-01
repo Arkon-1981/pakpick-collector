@@ -329,8 +329,15 @@ def main() -> None:
             "ttb_completely_h": to_hours(t.get("completely")),
             "enriched_at": now,
         })
-    rows += [{"store_item_id": c["id"], "igdb_id": None, "igdb_name": None,
-              "match_confidence": "none", "enriched_at": now} for c in misses]
+    # PostgREST 일괄 insert 는 모든 행의 키가 같아야 한다 — 실패 행도 전체 키로
+    rows += [{
+        "store_item_id": c["id"], "igdb_id": None, "igdb_name": None,
+        "match_confidence": "none",
+        "critic_rating": None, "critic_rating_count": None,
+        "user_rating": None, "user_rating_count": None,
+        "ttb_hastily_h": None, "ttb_normally_h": None, "ttb_completely_h": None,
+        "enriched_at": now,
+    } for c in misses]
 
     for i in range(0, len(rows), 200):
         _sb("game_meta", method="POST", body=rows[i : i + 200],
