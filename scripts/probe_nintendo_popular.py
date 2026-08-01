@@ -62,32 +62,35 @@ def main() -> int:
                 page.wait_for_timeout(4_000)
             return page.content()
 
-        for label, url in (("할인 목록", BASE_LIST), ("전체 카탈로그", CATALOG)):
-            try:
-                html = load(url)
-            except Exception as exc:
-                logger.warning("[probe] %s 접근 실패: %s", label, exc)
-                continue
-            # 정렬 select 는 'sorter' 클래스/아이디를 쓴다 — 옵션을 통째로 본다
-            opts = SORTER_RE.findall(html)
-            logger.info("[probe] %s 정렬 옵션 %d개: %s", label, len(opts),
-                        [(v, t.strip()) for v, t in opts][:12])
-            titles = TITLE_RE.findall(html)
-            logger.info("[probe] %s 기본 정렬 상위 5: %s", label,
-                        [t.strip()[:24] for t in titles[:5]])
+        # 2차: 드롭다운이 <option> 이 아니었다(1차 실측 0개). 정렬 마크업을 통째로
+        # 덤프하고, Magento 표준 인기 정렬 값을 직접 찔러 순서 변화를 비교한다.
+        html = load(CATALOG)
+        base_titles = [t.strip()[:22] for t in TITLE_RE.findall(html)][:5]
+        logger.info("[probe] 기본 정렬 상위 5: %s", base_titles)
 
-            # 인기로 보이는 옵션이 있으면 그 정렬로 다시 열어 순서가 바뀌는지 확인
-            for value, text in opts:
-                if any(w in text for w in ("인기", "베스트", "판매")):
-                    sorted_url = f"{url}?product_list_order={value}"
-                    try:
-                        html2 = load(sorted_url)
-                        t2 = TITLE_RE.findall(html2)
-                        logger.info("[probe] %s '%s'(%s) 상위 5: %s",
-                                    label, text.strip(), value,
-                                    [t.strip()[:24] for t in t2[:5]])
-                    except Exception as exc:
-                        logger.warning("[probe] 정렬 %s 실패: %s", value, exc)
+        # 정렬 관련 마크업 덤프 — 파라미터 이름과 값이 이 근처에 있다
+        low = html.lower()
+        for needle in ("product_list_order", "sorter", "정렬"):
+            pos, shown = 0, 0
+            while shown < 3:
+                i = low.find(needle, pos)
+                if i < 0:
+                    break
+                snippet = re.sub(r"\s+", " ", html[max(0, i-120):i+240])
+                logger.info("[probe] '%s' 주변: %s", needle, snippet[:330])
+                pos = i + len(needle)
+                shown += 1
+
+        # Magento 에서 흔한 인기 정렬 값들을 직접 시도
+        for value in ("bestsellers", "popularity", "most_ordered", "most_viewed",
+                      "top_rated", "sales", "ranking", "position"):
+            try:
+                h2 = load(f"{CATALOG}?product_list_order={value}")
+                t2 = [t.strip()[:22] for t in TITLE_RE.findall(h2)][:5]
+                changed = "다름!" if (t2 and t2 != base_titles) else "동일/비어있음"
+                logger.info("[probe] order=%s → %s  상위 5: %s", value, changed, t2)
+            except Exception as exc:
+                logger.warning("[probe] order=%s 실패: %s", value, exc)
 
         browser.close()
     logger.info("[probe] 끝 — DB 에는 아무것도 쓰지 않았습니다")
