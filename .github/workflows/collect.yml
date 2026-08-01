@@ -63,13 +63,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        # 임시(브랜치 전용): 닌텐도만 인기 정렬 탐사로 대체. 확인 후 원복한다.
-        run: |
-          if [ "${{ matrix.platform }}" = "nintendo" ]; then
-            python scripts/probe_nintendo_popular.py
-          else
-            python scripts/collect.py --platform ${{ matrix.platform }}
-          fi
+        run: python scripts/collect.py --platform ${{ matrix.platform }}
 
   # 수집이 모두 끝난 뒤 가격 알림을 보낸다.
   # 수집과 분리한 이유: 플랫폼별로 4개 잡이 병렬로 도는데, 각자 발송하면
