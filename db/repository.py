@@ -378,6 +378,43 @@ def touch_last_seen(item_id: int) -> None:
     ).eq("id", item_id).execute()
 
 
+def fetch_items_by_product_ids(
+    platform: str, store_region: str, product_ids: list[str]
+) -> dict[str, dict]:
+    """상품ID 목록의 행을 {상품ID: {"id", "current_data"}} 로 돌려준다.
+
+    current_data 를 통째로 받는 무거운 조회라 소수 상품 전용이다
+    (PS 인기 Top 10 처럼). 카탈로그 전체에는 fetch_item_meta 를 쓴다.
+    """
+    if not product_ids:
+        return {}
+    res = (
+        get_client()
+        .table("store_items")
+        .select("id,store_product_id,current_data")
+        .eq("platform", platform)
+        .eq("store_region", store_region)
+        .in_("store_product_id", product_ids)
+        .execute()
+    )
+    return {
+        row["store_product_id"]: {"id": row["id"], "current_data": row.get("current_data") or {}}
+        for row in (res.data or [])
+    }
+
+
+def update_current_data(item_id: int, current_data: dict, *, touch: bool = False) -> None:
+    """current_data 를 통째로 교체한다 (호출자가 기존 값에 병합해서 넘길 것).
+
+    upsert_store_item 과 달리 제목·이미지·버전 기록은 건드리지 않는다 —
+    순위 표시처럼 current_data 안의 키 하나만 고치고 싶을 때 쓴다.
+    """
+    payload: dict = {"current_data": current_data}
+    if touch:
+        payload["last_seen_at"] = _now()
+    get_client().table("store_items").update(payload).eq("id", item_id).execute()
+
+
 def upsert_store_item(
     *,
     platform: str,

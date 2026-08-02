@@ -58,13 +58,19 @@ def clean_title(raw: str) -> str:
     return t
 
 
+# 이 길이 미만의 기존 평은 '짧은 옛 형식'으로 보고 순차 재생성한다
+# (프롬프트가 40~70자 → 90~140자로 바뀌었다. 새 평 생성이 우선, 남는 쿼터로 교체)
+SHORT_REVIEW_LEN = 80
+
+
 def fetch_candidates(limit: int) -> list[dict]:
-    """할인 중 + 리뷰 없음 게임을 정가 높은 순(대작 우선)으로 고른다."""
-    # 이미 리뷰가 있는 store_item_id 집합 (PostgREST 1000행 상한 → 페이지네이션)
-    have: set = set()
+    """할인 중 게임 중 ① 리뷰 없음 ② 짧은 옛 평 순으로, 각각 정가 높은 순."""
+    # 이미 리뷰가 있는 store_item_id → 평 길이 (PostgREST 1000행 상한 → 페이지네이션)
+    have: dict[int, int] = {}
     for offset in range(0, 100_000, 1000):
-        page = _sb(f"ai_reviews?select=store_item_id&limit=1000&offset={offset}") or []
-        have.update(row["store_item_id"] for row in page)
+        page = _sb(f"ai_reviews?select=store_item_id,summary&limit=1000&offset={offset}") or []
+        for row in page:
+            have[row["store_item_id"]] = len(row.get("summary") or "")
         if len(page) < 1000:
             break
 
@@ -73,7 +79,8 @@ def fetch_candidates(limit: int) -> list[dict]:
     # timestamptz 의 '+00:00' 는 URL 에서 공백이 되어 깨지므로 'Z' 로
     iso = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat().replace("+00:00", "Z")
 
-    picked: list[dict] = []
+    fresh_new: list[dict] = []      # 리뷰 없음
+    fresh_short: list[dict] = []    # 짧은 옛 평 — 재생성 대상
     select = (
         "id,title,platform,"
         "price_snapshots(is_on_sale,regular_price,collected_at)"
@@ -85,7 +92,8 @@ def fetch_candidates(limit: int) -> list[dict]:
             f"&order=id.asc&limit=1000&offset={offset}"
         ) or []
         for r in rows:
-            if r["id"] in have:
+            length = have.get(r["id"])
+            if length is not None and length >= SHORT_REVIEW_LEN:
                 continue
             snaps = sorted(
                 r.get("price_snapshots") or [],
@@ -96,16 +104,21 @@ def fetch_candidates(limit: int) -> list[dict]:
             title = clean_title(r.get("title") or "")
             if not title:
                 continue
-            picked.append({
+            cand = {
                 "id": r["id"], "title": title, "platform": r["platform"],
                 "regular": snaps[0].get("regular_price") or 0,
-            })
+            }
+            (fresh_new if length is None else fresh_short).append(cand)
         if len(rows) < 1000:
             break
 
-    # 정가 높은 순(대작 우선) → 상위 limit개
-    picked.sort(key=lambda x: x["regular"], reverse=True)
-    return picked[:limit]
+    # 새 평이 먼저(대작 우선), 남는 쿼터로 짧은 옛 평을 교체한다
+    fresh_new.sort(key=lambda x: x["regular"], reverse=True)
+    fresh_short.sort(key=lambda x: x["regular"], reverse=True)
+    picked = (fresh_new + fresh_short)[:limit]
+    print(f"후보 구성: 새 평 {min(len(fresh_new), limit)}개"
+          f" + 짧은 평 교체 {max(0, min(limit - len(fresh_new), len(fresh_short)))}개")
+    return picked
 
 
 def gen_review(title: str, model: str) -> str | None:

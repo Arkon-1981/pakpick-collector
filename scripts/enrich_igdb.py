@@ -206,6 +206,44 @@ def search_game(title: str) -> tuple[dict | None, str]:
     return None, "none"
 
 
+GAME_FIELDS = (
+    "id,name,rating,rating_count,aggregated_rating,"
+    "aggregated_rating_count,genres.name"
+)
+
+
+def match_steam_by_appid(appids: list[str]) -> dict[str, dict]:
+    """스팀 appid → IGDB 게임. 제목 매칭이 필요 없는 공식 매핑(external_games).
+
+    한글 전용 제목(마블 스파이더맨 2 등)도 appid 로는 정확히 잡힌다.
+    category 1 = Steam.
+    """
+    id_map: dict[str, int] = {}
+    for i in range(0, len(appids), 100):
+        chunk = appids[i : i + 100]
+        uids = ",".join(f'"{a}"' for a in chunk)
+        rows = igdb_query("external_games", (
+            f"fields uid,game; where category = 1 & uid = ({uids}); limit 200;"
+        ))
+        time.sleep(REQUEST_GAP)
+        for r in rows:
+            if r.get("game") and r.get("uid"):
+                id_map.setdefault(r["uid"], r["game"])
+
+    games: dict[int, dict] = {}
+    gids = sorted(set(id_map.values()))
+    for i in range(0, len(gids), 100):
+        chunk = gids[i : i + 100]
+        rows = igdb_query("games", (
+            f"fields {GAME_FIELDS}; "
+            f"where id = ({','.join(map(str, chunk))}); limit 100;"
+        ))
+        time.sleep(REQUEST_GAP)
+        for r in rows:
+            games[r["id"]] = r
+    return {uid: games[gid] for uid, gid in id_map.items() if gid in games}
+
+
 def fetch_ttb(game_ids: list[int]) -> dict[int, dict]:
     """플레이 타임(초). {igdb_id: {hastily, normally, completely}}"""
     out: dict[int, dict] = {}
@@ -252,7 +290,7 @@ def fetch_candidates(limit: int) -> list[dict]:
     # current_data 통째로는 받지 않는다 — PS 행 하나가 수십 KB (fetch_item_meta 와 같은 이유)
     for offset in range(0, 10_000, 1000):
         rows = _sb(
-            "store_items?select=id,title,platform,"
+            "store_items?select=id,title,platform,store_product_id,"
             "ctype:current_data->>content_type,rank:current_data->popular_rank"
             f"&last_seen_at=gte.{iso}&order=id.asc&limit=1000&offset={offset}"
         ) or []
@@ -265,6 +303,7 @@ def fetch_candidates(limit: int) -> list[dict]:
                 continue
             picked.append({
                 "id": r["id"], "title": title, "platform": r["platform"],
+                "pid": r.get("store_product_id") or "",
                 "rank": r.get("rank") if isinstance(r.get("rank"), (int, float)) else 10_000,
             })
         if len(rows) < 1000:
@@ -295,10 +334,25 @@ def main() -> None:
     cands = fetch_candidates(args.limit)
     print(f"후보 {len(cands)}개 (인기 순위 → 정가 순)")
 
+    # 스팀은 appid 공식 매핑으로 먼저 — 제목 검색이 전혀 필요 없다
+    steam_map: dict[str, dict] = {}
+    steam_appids = [c["pid"] for c in cands
+                    if c["platform"] == "steam" and c["pid"].isdigit()]
+    if steam_appids:
+        try:
+            steam_map = match_steam_by_appid(steam_appids)
+            print(f"스팀 appid 매핑: {len(steam_map)}/{len(steam_appids)}")
+        except Exception as exc:
+            print(f"스팀 appid 매핑 실패({exc}) — 제목 검색으로 폴백")
+
     matched: list[tuple[dict, dict, str]] = []   # (후보, igdb게임, 신뢰도)
     misses: list[dict] = []
     for c in cands:
-        game, conf = search_game(c["title"])
+        game, conf = None, "exact"
+        if c["platform"] == "steam":   # nsuid 등 타 플랫폼 숫자 ID 와 충돌 방지
+            game = steam_map.get(c["pid"])
+        if game is None:
+            game, conf = search_game(c["title"])
         if game is None:
             misses.append(c)
             print(f"  · miss: [{c['platform']}] {c['title'][:44]}")
