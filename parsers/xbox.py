@@ -160,6 +160,22 @@ def _extract_price(product: dict) -> dict:
     return best
 
 
+def _includes_gamepass(obj) -> bool:
+    """카탈로그 상품 JSON 어딘가의 Affirmations 에 Game Pass 멤버십 문구가 있는가.
+
+    (실측: "with your Xbox Game Pass Premium membership." 같은 안내가
+    Affirmations 배열로 온다. 중첩 위치가 SKU 구조에 따라 달라 재귀로 찾는다.)
+    """
+    if isinstance(obj, dict):
+        for aff in obj.get("Affirmations") or []:
+            if "game pass" in (aff.get("Description") or "").lower():
+                return True
+        return any(_includes_gamepass(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_includes_gamepass(v) for v in obj)
+    return False
+
+
 def parse_catalog_products(data: dict) -> list[ParsedItem]:
     items: list[ParsedItem] = []
 
@@ -191,6 +207,8 @@ def parse_catalog_products(data: dict) -> list[ParsedItem]:
         # 상품 JSON 전체를 보존 — Game Pass, 지원 기기, 기능 등 모든 정보 포함
         extracted = {
             "product": product,
+            # 구독 포함 표시 — 웹이 중첩 JSON 을 못 뒤지므로 최상위에 뽑아 둔다
+            **({"subscription": "gamepass"} if _includes_gamepass(product) else {}),
             "price_raw": price,
             "release_date": release_date,
             "developer": loc.get("DeveloperName"),

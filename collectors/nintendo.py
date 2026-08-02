@@ -244,10 +244,37 @@ class NintendoCollector(BaseCollector):
             self.pages_found += 1
 
             items = parse_list_page(result.text)
+
+            # NSO 전용 판별 — 상세 페이지에만 "가입자 한정" 표기가 있다.
+            # 한 번 판별한 상품은 기존 값을 재사용해 상세 로드를 아낀다
+            # (무료 목록 ~24개 중 신규분만 브라우저를 탄다).
+            try:
+                known = repository.fetch_item_meta(
+                    self.platform, config.STORE_REGION, ["subscription"]
+                )
+            except Exception:
+                known = {}
+
+            nso = 0
             for item in items:
                 item.extracted_data["content_kind"] = "free"
+                prev = (known.get(item.store_product_id) or {}).get("subscription")
+                if prev is not None:
+                    if prev:   # 빈 문자열 = '확인했지만 NSO 아님'
+                        item.extracted_data["subscription"] = prev
+                        nso += 1
+                    else:
+                        item.extracted_data["subscription"] = ""
+                elif item.store_url:
+                    html = self._fetch_detail_server(item.store_url) or ""
+                    if "가입자 한정" in html and "Nintendo Switch Online" in html:
+                        item.extracted_data["subscription"] = "nso"
+                        nso += 1
+                    else:
+                        # 확인 완료 표시 — 다음 실행이 또 상세를 열지 않게
+                        item.extracted_data["subscription"] = ""
                 self.save_item(item, raw_doc_id)
-            logger.info("[nintendo] 무료 게임 %d개 저장", len(items))
+            logger.info("[nintendo] 무료 게임 %d개 저장 (NSO 전용 %d개)", len(items), nso)
         except Exception:
             logger.exception("[nintendo] 무료 게임 수집 실패")
 
@@ -262,7 +289,8 @@ class NintendoCollector(BaseCollector):
         try:
             keep = repository.fetch_item_meta(
                 self.platform, config.STORE_REGION,
-                ["content_kind", "platform_generation", "gallery", "release_date"],
+                ["content_kind", "platform_generation", "gallery", "release_date",
+                 "subscription"],
             )
         except Exception:
             logger.exception("[nintendo] 기존 메타 조회 실패 — 인기 수집 생략")
@@ -293,7 +321,8 @@ class NintendoCollector(BaseCollector):
                 seen.add(item.store_product_id)
                 rank += 1
                 prev = keep.get(item.store_product_id) or {}
-                for key in ("content_kind", "platform_generation", "release_date"):
+                for key in ("content_kind", "platform_generation", "release_date",
+                            "subscription"):
                     if prev.get(key) is not None:
                         item.extracted_data[key] = prev[key]
                 # 상세 보강으로 채운 갤러리(2장+)를 타일 1장짜리로 덮지 않는다
