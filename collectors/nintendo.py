@@ -45,6 +45,10 @@ LIST_URL = "https://store.nintendo.co.kr/digital/sale?p={page}"
 SCHEDULE_URL = "https://www.nintendo.com/kr/schedule"
 # 무료 게임 목록 (스토어라 봇 차단 가능 → 필요시 브라우저)
 FREE_URL = "https://store.nintendo.co.kr/digital/diigital-free"
+# 베스트셀러(인기) 목록 — 홈 상단 'BEST' 링크. 목록의 정렬 파라미터는 전부 무시되고
+# GraphQL 도 404 라(탐사 실측), 이 전용 페이지가 스토어의 유일한 인기 소스다.
+BEST_URL = "https://store.nintendo.co.kr/digital/best-sellers?p={page}"
+BEST_PAGES = 2  # 순위는 상위권만 의미 있다 — 스팀(98)·엑스박스(47)와 보조를 맞춘다
 # 공식 가격 API — NSUID 50개 배치, 봇 차단 없음, 세일 종료일까지 제공
 PRICE_API_URL = "https://api.ec.nintendo.com/v1/price?country=KR&lang=en&ids={ids}"
 PRICE_API_BATCH = 50  # API가 50개 초과 시 "Over ids limit number" 반환
@@ -105,6 +109,9 @@ class NintendoCollector(BaseCollector):
             self._collect_schedule()
             self._collect_pages()
             self._collect_free()
+            # 인기는 다른 목록 뒤에 — upsert 가 current_data 를 통째로 덮어쓰므로,
+            # 같은 실행의 앞 단계가 popular_rank 를 지우지 않게 순서로 보장한다.
+            self._collect_popular()
             self._refresh_prices_via_api()
         finally:
             self._close_browser()
@@ -243,6 +250,61 @@ class NintendoCollector(BaseCollector):
             logger.info("[nintendo] 무료 게임 %d개 저장", len(items))
         except Exception:
             logger.exception("[nintendo] 무료 게임 수집 실패")
+
+    def _collect_popular(self) -> None:
+        """베스트셀러 목록에서 인기 순위를 수집한다. 순위가 곧 정보라 popular_rank 도 저장.
+
+        upsert 가 current_data 를 통째로 덮어쓰므로, 다른 목록에서 채워 둔 값
+        (content_kind·세대·갤러리·출시일)은 저장 직전에 읽어 와 다시 실어 준다.
+        순위에서 빠진 상품은 다른 목록이 재저장하면서 자연히 popular_rank 가 지워지고,
+        어디에도 안 잡히면 신선도 창에서 밀려난다.
+        """
+        try:
+            keep = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION,
+                ["content_kind", "platform_generation", "gallery", "release_date"],
+            )
+        except Exception:
+            logger.exception("[nintendo] 기존 메타 조회 실패 — 인기 수집 생략")
+            return
+
+        rank = 0
+        seen: set[str] = set()
+        for page_no in range(1, BEST_PAGES + 1):
+            url = BEST_URL.format(page=page_no)
+            result = self._get_page(url)
+            if result is None or result.status_code != 200:
+                code = result.status_code if result else "요청 실패"
+                self.record_parse_error(url, f"인기 목록 상태코드 {code}")
+                break
+
+            raw_doc_id = self.save_raw(
+                result, document_type="list",
+                filename=f"best-p{page_no}.html", content_type="text/html",
+            )
+            self.pages_found += 1
+
+            items = parse_list_page(result.text)
+            new_items = [i for i in items if i.store_product_id not in seen]
+            if not new_items:
+                break  # 마지막 페이지를 넘어가면 같은 상품이 반복된다
+
+            for item in new_items:
+                seen.add(item.store_product_id)
+                rank += 1
+                prev = keep.get(item.store_product_id) or {}
+                for key in ("content_kind", "platform_generation", "release_date"):
+                    if prev.get(key) is not None:
+                        item.extracted_data[key] = prev[key]
+                # 상세 보강으로 채운 갤러리(2장+)를 타일 1장짜리로 덮지 않는다
+                prev_gallery = prev.get("gallery")
+                if isinstance(prev_gallery, list) and len(prev_gallery) > 1:
+                    item.extracted_data["gallery"] = prev_gallery
+                item.extracted_data["popular_rank"] = rank
+                self.save_item(item, raw_doc_id)
+            logger.info("[nintendo] 인기 %d페이지: %d개", page_no, len(new_items))
+
+        logger.info("[nintendo] 인기(베스트셀러) 총 %d개 저장", rank)
 
     def _collect_pages(self) -> None:
         seen_ids: set[str] = set()
