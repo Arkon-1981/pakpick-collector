@@ -111,9 +111,10 @@ def fetch_candidates(limit: int) -> list[dict]:
 def gen_review(title: str, model: str) -> str | None:
     """Gemini로 한 줄 평 생성. 게임을 모르면 빈 문자열."""
     prompt = (
-        f"너는 콘솔 게임 딜 사이트의 에디터야. 게임 '{title}'에 대한 한국어 '한 줄 평'을 써줘.\n"
+        f"너는 콘솔 게임 딜 사이트의 에디터야. 게임 '{title}'에 대한 한국어 '에디터 평'을 써줘.\n"
         "규칙:\n"
-        "- 40~70자, 구매 결정에 도움되는 핵심만. 과장/스포일러 금지.\n"
+        "- 90~140자, 문장 두 개까지. 구매 결정에 도움되는 핵심만: 어떤 게임이고,\n"
+        "  뭐가 좋고, 어떤 사람에게 맞는지. 과장/스포일러 금지.\n"
         "- 평론가 평판(메타크리틱 점수 등)을 알면 자연스럽게 녹여줘.\n"
         "- 이 게임을 확실히 모르거나 정보가 부족하면 summary를 빈 문자열로.\n"
         'JSON만 출력: {"summary": "..."}'
@@ -159,8 +160,8 @@ def gen_review(title: str, model: str) -> str | None:
         summary = (json.loads(text).get("summary") or "").strip()
     except (KeyError, IndexError, json.JSONDecodeError):
         return None
-    # 너무 짧거나 긴 건 스킵
-    if not summary or len(summary) < 10 or len(summary) > 160:
+    # 너무 짧거나 긴 건 스킵 (목표 90~140자 — 여유를 두고 거른다)
+    if not summary or len(summary) < 40 or len(summary) > 240:
         return None
     return summary
 

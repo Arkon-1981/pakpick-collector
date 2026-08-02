@@ -178,7 +178,8 @@ def search_game(title: str) -> tuple[dict | None, str]:
         rows = igdb_query("games", (
             f'search "{esc}"; '
             "fields id,name,rating,rating_count,aggregated_rating,"
-            "aggregated_rating_count,alternative_names.name,category; limit 8;"
+            "aggregated_rating_count,alternative_names.name,genres.name,category; "
+            "limit 8;"
         ))
         time.sleep(REQUEST_GAP)
 
@@ -327,6 +328,7 @@ def main() -> None:
             "ttb_hastily_h": to_hours(t.get("hastily")),
             "ttb_normally_h": to_hours(t.get("normally")),
             "ttb_completely_h": to_hours(t.get("completely")),
+            "genres": [x["name"] for x in g.get("genres") or []] or None,
             "enriched_at": now,
         })
     # PostgREST 일괄 insert 는 모든 행의 키가 같아야 한다 — 실패 행도 전체 키로
@@ -336,6 +338,7 @@ def main() -> None:
         "critic_rating": None, "critic_rating_count": None,
         "user_rating": None, "user_rating_count": None,
         "ttb_hastily_h": None, "ttb_normally_h": None, "ttb_completely_h": None,
+        "genres": None,
         "enriched_at": now,
     } for c in misses]
 
