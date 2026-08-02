@@ -16,6 +16,7 @@
   4. 상품이 더 안 나오면 종료
 """
 import json
+import re
 import time
 from datetime import datetime, timezone
 
@@ -86,6 +87,27 @@ FILTER_URL_TEMPLATES = [
     "https://store.nintendo.co.kr/digital/sale?label_platform={opt}&p={page}",
     "https://store.nintendo.co.kr/digital/sale?amshopby%5Blabel_platform%5D%5B%5D={opt}&p={page}",
 ]
+
+
+def _looks_nso_only(html: str) -> bool:
+    """상세 HTML 이 'NSO 가입자 전용 무료'를 뜻하는가.
+
+    실측 기반 문구 목록 — 스토어가 표현을 바꾸면 _collect_free 가 남기는
+    'NSO 문구(비전용 판정)' 로그를 보고 여기만 갱신하면 된다.
+    "온라인 플레이에는 가입이 필요" 같은 일반 멀티플레이 안내(거의 모든
+    게임에 있음)와 헷갈리지 않게, 전용·한정 표현만 인정한다.
+    """
+    if "Nintendo Switch Online" not in html:
+        return False
+    needles = (
+        "가입자 한정",             # TETRIS 99 류
+        "가입자 전용",
+        "멤버십 전용",
+        "Nintendo Switch Online 전용",
+        "+ 확장팩 전용",           # Nintendo Classics (GameCube 등)
+        "확장팩 이용권",
+    )
+    return any(n in html for n in needles)
 
 
 class NintendoCollector(BaseCollector):
@@ -245,34 +267,26 @@ class NintendoCollector(BaseCollector):
 
             items = parse_list_page(result.text)
 
-            # NSO 전용 판별 — 상세 페이지에만 "가입자 한정" 표기가 있다.
-            # 한 번 판별한 상품은 기존 값을 재사용해 상세 로드를 아낀다
-            # (무료 목록 ~24개 중 신규분만 브라우저를 탄다).
-            try:
-                known = repository.fetch_item_meta(
-                    self.platform, config.STORE_REGION, ["subscription"]
-                )
-            except Exception:
-                known = {}
-
+            # NSO 전용 판별 — 목록 타일엔 표기가 없어 상세를 확인한다.
+            # 매 실행 24개 안팎 × 상세 1회 ≈ 4분. 캐시를 두면 문구 규칙을 고쳐도
+            # 옛 판정이 남아서 못 고치므로, 그냥 매번 확인한다 (자가 치유).
             nso = 0
             for item in items:
                 item.extracted_data["content_kind"] = "free"
-                prev = (known.get(item.store_product_id) or {}).get("subscription")
-                if prev is not None:
-                    if prev:   # 빈 문자열 = '확인했지만 NSO 아님'
-                        item.extracted_data["subscription"] = prev
-                        nso += 1
-                    else:
-                        item.extracted_data["subscription"] = ""
-                elif item.store_url:
+                if item.store_url:
                     html = self._fetch_detail_server(item.store_url) or ""
-                    if "가입자 한정" in html and "Nintendo Switch Online" in html:
+                    if _looks_nso_only(html):
                         item.extracted_data["subscription"] = "nso"
                         nso += 1
                     else:
-                        # 확인 완료 표시 — 다음 실행이 또 상세를 열지 않게
                         item.extracted_data["subscription"] = ""
+                        # 문구 실측용: NSO 를 언급하는데 전용 판정이 아니면 주변 문구를
+                        # 남긴다 — 표기 규칙이 바뀌었을 때 이 로그로 바로 잡는다.
+                        i = html.find("Nintendo Switch Online")
+                        if i >= 0:
+                            snippet = re.sub(r"\s+", " ", html[max(0, i - 160):i + 200])
+                            logger.info("[nintendo] NSO 문구(비전용 판정) %s: %s",
+                                        item.title, snippet[:300])
                 self.save_item(item, raw_doc_id)
             logger.info("[nintendo] 무료 게임 %d개 저장 (NSO 전용 %d개)", len(items), nso)
         except Exception:
