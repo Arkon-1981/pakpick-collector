@@ -16,7 +16,6 @@
   4. 상품이 더 안 나오면 종료
 """
 import json
-import re
 import time
 from datetime import datetime, timezone
 
@@ -89,23 +88,23 @@ FILTER_URL_TEMPLATES = [
 ]
 
 
-def _looks_nso_only(html: str) -> bool:
-    """상세 HTML 이 'NSO 가입자 전용 무료'를 뜻하는가.
+def _is_nso_only(title: str, html: str) -> bool:
+    """이 무료 게임이 'NSO 가입자 전용'인가.
 
-    실측 기반 문구 목록 — 스토어가 표현을 바꾸면 _collect_free 가 남기는
-    'NSO 문구(비전용 판정)' 로그를 보고 여기만 갱신하면 된다.
-    "온라인 플레이에는 가입이 필요" 같은 일반 멀티플레이 안내(거의 모든
-    게임에 있음)와 헷갈리지 않게, 전용·한정 표현만 인정한다.
+    1) 제목 규칙 — 닌텐도는 NSO 멤버십 앱에 'Nintendo Classics' 이름을 붙인다
+       (Virtual Boy/GameCube – Nintendo Classics 등). 가장 확실한 신호.
+    2) 상세 문구 — TETRIS 99 류 가입자 한정 게임용. 주의: 'Nintendo Switch
+       Online' 텍스트 자체는 모든 상품 페이지의 멤버십 위젯(「…+ 추가 팩」에
+       가입 중입니다)에 들어 있어서(실측: 24/24) 단독으로는 신호가 아니다 —
+       전용·한정 표현이 함께 있을 때만 인정한다.
     """
-    if "Nintendo Switch Online" not in html:
-        return False
+    if "Nintendo Classics" in (title or ""):
+        return True
     needles = (
         "가입자 한정",             # TETRIS 99 류
         "가입자 전용",
+        "가입자만 플레이",
         "멤버십 전용",
-        "Nintendo Switch Online 전용",
-        "+ 확장팩 전용",           # Nintendo Classics (GameCube 등)
-        "확장팩 이용권",
     )
     return any(n in html for n in needles)
 
@@ -275,18 +274,11 @@ class NintendoCollector(BaseCollector):
                 item.extracted_data["content_kind"] = "free"
                 if item.store_url:
                     html = self._fetch_detail_server(item.store_url) or ""
-                    if _looks_nso_only(html):
+                    if _is_nso_only(item.title or "", html):
                         item.extracted_data["subscription"] = "nso"
                         nso += 1
                     else:
                         item.extracted_data["subscription"] = ""
-                        # 문구 실측용: NSO 를 언급하는데 전용 판정이 아니면 주변 문구를
-                        # 남긴다 — 표기 규칙이 바뀌었을 때 이 로그로 바로 잡는다.
-                        i = html.find("Nintendo Switch Online")
-                        if i >= 0:
-                            snippet = re.sub(r"\s+", " ", html[max(0, i - 160):i + 200])
-                            logger.info("[nintendo] NSO 문구(비전용 판정) %s: %s",
-                                        item.title, snippet[:300])
                 self.save_item(item, raw_doc_id)
             logger.info("[nintendo] 무료 게임 %d개 저장 (NSO 전용 %d개)", len(items), nso)
         except Exception:
