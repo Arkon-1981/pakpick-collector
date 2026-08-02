@@ -60,6 +60,9 @@ META_KEYS = ("release_date", "publisher", "genres", "content_rating",
 # 해시는 외부에서 얻어 직접 호출로 검증했지만(한 카테고리 5,906건 확인) 소니가
 # 스키마를 바꾸면 무효가 될 수 있어, 실패 시 기존 HTML 경로로 폴백한다.
 GQL_URL = "https://web.np.playstation.com/api/graphql/v1/op"
+# '국내 Top 10' 카테고리 — /pages/latest 의 "Top 10 Games in your Country" 스트랜드가
+# 가리키는 categoryId (탐사 실측). 항목이 concepts(순위 순)로 오는 특수 카테고리다.
+POPULAR_CATEGORY = "fbb563aa-c602-476d-bb92-fe7f35080205"
 GQL_HASH = "9845afc0dbaab4965f6563fffc703f588c8e76792000e8610843b8d3ee9c4c09"
 GQL_PAGE_SIZE = 100
 GQL_MAX_PAGES = 60  # 카테고리당 최대 6,000개 (무한 루프 방지)
@@ -164,6 +167,118 @@ class PlaystationCollector(BaseCollector):
         # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신.
         #    크롤이 시간예산으로 조기 종료되어도 이 단계는 반드시 실행된다.
         self._enrich_end_dates(saved)
+
+        # 5. 인기(국내 Top 10) — 요청 몇 번이라 시간예산과 무관하게 마지막에 붙인다.
+        self._collect_popular()
+
+    def _collect_popular(self) -> None:
+        """스토어 '국내 Top 10' 카테고리에서 인기 순위를 수집한다.
+
+        다른 플랫폼과 달리 재저장(save_item)하지 않는다 — PS 는 current_data 에
+        원본 노드를 통째로 보관하므로, 이 단계의 부분 정보로 upsert 하면 기존
+        정보가 통째로 지워진다. 기존 행의 current_data 에 popular_rank 만 병합하고,
+        순위에서 빠진 행은 키를 걷어낸다.
+
+        주의: 이 카테고리는 variables 에 sortBy 를 넣으면(널이라도) products 로
+        모드가 바뀌어 빈 목록이 온다(실측). sortBy 없이 불러야 '순위 순 concepts'다.
+        """
+        variables = json.dumps({
+            "id": POPULAR_CATEGORY,
+            "pageArgs": {"size": 20, "offset": 0},
+            "filterBy": [], "facetOptions": [],
+        }, separators=(",", ":"))
+        extensions = json.dumps({
+            "persistedQuery": {"version": 1, "sha256Hash": GQL_HASH}
+        }, separators=(",", ":"))
+        url = (
+            f"{GQL_URL}?operationName=categoryGridRetrieve"
+            f"&variables={quote(variables)}&extensions={quote(extensions)}"
+        )
+        try:
+            result = fetch(url, api=True, extra_headers={
+                "content-type": "application/json",
+                "x-psn-store-locale-override": "ko-kr",
+            })
+            if result.status_code != 200:
+                self.record_parse_error(url, f"인기 카테고리 상태코드 {result.status_code}")
+                return
+            data = json.loads(result.text)
+            concepts = (data.get("data") or {}).get("categoryGridRetrieve", {}).get("concepts") or []
+        except Exception:
+            logger.exception("[playstation] 인기 카테고리 조회 실패")
+            return
+        if not concepts:
+            logger.warning("[playstation] 인기 카테고리가 비어 있음 — 응답 구조 변경 가능성")
+            return
+
+        self.save_raw(
+            result, document_type="list", filename="popular-top10.json",
+            content_type="application/json",
+        )
+        self.pages_found += 1
+
+        # 순위 → 상품ID (concept 의 첫 product 가 대표 판본)
+        ranked: list[tuple[int, str, str]] = []
+        for rank, c in enumerate(concepts, start=1):
+            products = c.get("products") or []
+            pid = products[0].get("id") if products else None
+            if pid:
+                ranked.append((rank, pid, c.get("name") or ""))
+
+        try:
+            rows = repository.fetch_items_by_product_ids(
+                self.platform, config.STORE_REGION, [p for _, p, _ in ranked]
+            )
+            # 지난 순위 정리 — 이번 목록에 없는 행에서 popular_rank 를 걷어낸다
+            stale = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION, ["popular_rank"]
+            )
+        except Exception:
+            logger.exception("[playstation] 인기 순위 저장 준비 실패")
+            return
+
+        updated = missing = 0
+        current_pids = {p for _, p, _ in ranked}
+        for rank, pid, name in ranked:
+            row = rows.get(pid)
+            if row is None:
+                missing += 1   # 아직 카탈로그에 없는 상품 — 다음 크롤이 발견하면 합류
+                logger.info("[playstation] 인기 #%d %s 는 미보유 상품 (%s)", rank, name[:24], pid)
+                continue
+            cur = dict(row["current_data"])
+            cur["popular_rank"] = rank
+            try:
+                # 스토어 인기 목록에 있다 = 지금 팔리고 있다 → 신선도도 함께 갱신
+                repository.update_current_data(row["id"], cur, touch=True)
+                self.items_seen.add(row["id"])
+                updated += 1
+            except Exception:
+                logger.exception("[playstation] 인기 순위 저장 실패: %s", pid)
+
+        cleared = 0
+        stale_pids = [
+            pid for pid, meta in stale.items()
+            if meta.get("popular_rank") is not None and pid not in current_pids
+        ]
+        if stale_pids:
+            try:
+                old_rows = repository.fetch_items_by_product_ids(
+                    self.platform, config.STORE_REGION, stale_pids
+                )
+            except Exception:
+                logger.exception("[playstation] 지난 순위 조회 실패")
+                old_rows = {}
+            for pid, old in old_rows.items():
+                try:
+                    cur = dict(old["current_data"])
+                    cur.pop("popular_rank", None)
+                    repository.update_current_data(old["id"], cur)
+                    cleared += 1
+                except Exception:
+                    logger.exception("[playstation] 지난 순위 정리 실패: %s", pid)
+
+        logger.info("[playstation] 인기 Top10 — 순위 %d개 저장, 미보유 %d개, 지난 순위 %d개 정리",
+                    updated, missing, cleared)
 
     def _collect_releases(self, seen_ids: set[str]) -> None:
         """신작·출시예정 카테고리를 수집한다 (할인과 동일한 __NEXT_DATA__ 구조).
