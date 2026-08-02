@@ -269,9 +269,20 @@ class NintendoCollector(BaseCollector):
             # NSO 전용 판별 — 목록 타일엔 표기가 없어 상세를 확인한다.
             # 매 실행 24개 안팎 × 상세 1회 ≈ 4분. 캐시를 두면 문구 규칙을 고쳐도
             # 옛 판정이 남아서 못 고치므로, 그냥 매번 확인한다 (자가 치유).
+            # 무료 목록 재저장도 보강된 갤러리를 지우지 않게 보존한다
+            try:
+                prev_galleries = repository.fetch_item_meta(
+                    self.platform, config.STORE_REGION, ["gallery"]
+                )
+            except Exception:
+                prev_galleries = {}
+
             nso = 0
             for item in items:
                 item.extracted_data["content_kind"] = "free"
+                prev_g = (prev_galleries.get(item.store_product_id) or {}).get("gallery")
+                if isinstance(prev_g, list) and len(prev_g) > 1:
+                    item.extracted_data["gallery"] = prev_g
                 if item.store_url:
                     html = self._fetch_detail_server(item.store_url) or ""
                     if _is_nso_only(item.title or "", html):
@@ -335,6 +346,10 @@ class NintendoCollector(BaseCollector):
                 prev_gallery = prev.get("gallery")
                 if isinstance(prev_gallery, list) and len(prev_gallery) > 1:
                     item.extracted_data["gallery"] = prev_gallery
+                else:
+                    # 인기 카드는 가장 눈에 띄는 자리 — 스크린샷이 없으면 채워 둔다
+                    # (30개뿐이고, 한 번 채우면 다음부터는 재사용이라 비용이 사라진다)
+                    self._enrich_detail(item)
                 item.extracted_data["popular_rank"] = rank
                 self.save_item(item, raw_doc_id)
             logger.info("[nintendo] 인기 %d페이지: %d개", page_no, len(new_items))
@@ -423,6 +438,17 @@ class NintendoCollector(BaseCollector):
             for item, _ in by_disc[: config.NINTENDO_GALLERY_MAX]
         }
 
+        # 이전 실행이 채워 둔 갤러리(2장+)를 재저장이 지우지 않게 미리 받아 둔다.
+        # 이 보존이 없으면 보강 대상(상위 150개)에서 빠지는 순간 스크린샷이 타일
+        # 1장으로 되돌아가, 커버리지가 실행마다 리셋됐다 (실측: 닌텐도만 31%).
+        try:
+            prev_galleries = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION, ["gallery"]
+            )
+        except Exception:
+            logger.exception("[nintendo] 기존 갤러리 조회 실패 — 보존 없이 진행")
+            prev_galleries = {}
+
         for item, raw_doc_id in collected:
             pid = item.store_product_id
             # 세대: SW2 필터 소속이면 switch2, 아니면 switch1 (필터가 동작한 경우만).
@@ -433,6 +459,10 @@ class NintendoCollector(BaseCollector):
                 item.extracted_data["platform_generation"] = "switch2" if pid in sw2_ids else "switch1"
             if pid in gallery_ids:
                 self._enrich_detail(item)  # 갤러리(스크린샷)만 보강
+            else:
+                prev = (prev_galleries.get(pid) or {}).get("gallery")
+                if isinstance(prev, list) and len(prev) > 1:
+                    item.extracted_data["gallery"] = prev
             self.save_item(item, raw_doc_id)
 
         logger.info(
