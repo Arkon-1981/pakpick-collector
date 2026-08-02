@@ -59,8 +59,8 @@ def clean_title(raw: str) -> str:
 
 
 # 이 길이 미만의 기존 평은 '짧은 옛 형식'으로 보고 순차 재생성한다
-# (프롬프트가 40~70자 → 90~140자로 바뀌었다. 새 평 생성이 우선, 남는 쿼터로 교체)
-SHORT_REVIEW_LEN = 80
+# (프롬프트가 40~70자 → 90~140자 → 150~200자로 커졌다. 새 평 우선, 남는 쿼터로 교체)
+SHORT_REVIEW_LEN = 140
 
 
 def fetch_candidates(limit: int) -> list[dict]:
@@ -126,8 +126,8 @@ def gen_review(title: str, model: str) -> str | None:
     prompt = (
         f"너는 콘솔 게임 딜 사이트의 에디터야. 게임 '{title}'에 대한 한국어 '에디터 평'을 써줘.\n"
         "규칙:\n"
-        "- 90~140자, 문장 두 개까지. 구매 결정에 도움되는 핵심만: 어떤 게임이고,\n"
-        "  뭐가 좋고, 어떤 사람에게 맞는지. 과장/스포일러 금지.\n"
+        "- 150~200자, 문장 2~3개. 구매 결정에 도움되는 핵심만: 어떤 게임이고,\n"
+        "  뭐가 좋고(핵심 재미·완성도), 어떤 사람에게 맞는지. 과장/스포일러 금지.\n"
         "- 평론가 평판(메타크리틱 점수 등)을 알면 자연스럽게 녹여줘.\n"
         "- 이 게임을 확실히 모르거나 정보가 부족하면 summary를 빈 문자열로.\n"
         'JSON만 출력: {"summary": "..."}'
@@ -173,8 +173,8 @@ def gen_review(title: str, model: str) -> str | None:
         summary = (json.loads(text).get("summary") or "").strip()
     except (KeyError, IndexError, json.JSONDecodeError):
         return None
-    # 너무 짧거나 긴 건 스킵 (목표 90~140자 — 여유를 두고 거른다)
-    if not summary or len(summary) < 40 or len(summary) > 240:
+    # 너무 짧거나 긴 건 스킵 (목표 150~200자 — 여유를 두고 거른다)
+    if not summary or len(summary) < 100 or len(summary) > 320:
         return None
     return summary
 
