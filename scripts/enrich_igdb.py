@@ -323,9 +323,16 @@ def fetch_candidates(limit: int) -> list[dict]:
 
 
 def to_hours(seconds) -> float | None:
+    """초 → 시간. 크라우드 데이터라 말이 안 되는 값이 온다.
+
+    (실측: 'Content Warning' 컴플리트 216,228시간 ≈ 25년 — 이 한 행이
+    numeric(6,1) 오버플로(22003)를 내며 배치 전체를 400 으로 죽였다.)
+    HLTB 기준 최장급(방치형/MMO)도 수천 시간 선이라 5,000h 초과는 버린다.
+    """
     if not seconds:
         return None
-    return round(seconds / 3600, 1)
+    hours = round(seconds / 3600, 1)
+    return hours if hours <= 5000 else None
 
 
 def main() -> None:
