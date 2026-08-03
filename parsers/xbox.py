@@ -204,9 +204,10 @@ def parse_catalog_products(data: dict) -> list[ParsedItem]:
 
         store_url = f"https://www.xbox.com/ko-KR/games/store/p/{product_id}"
 
-        # 상품 JSON 전체를 보존 — Game Pass, 지원 기기, 기능 등 모든 정보 포함
+        # 상품 원본은 저장하지 않는다 — 행당 47KB(전 플랫폼 최대)로 DB 를 가장 많이
+        # 먹었고, 가격이 JSON 안에 박혀 있어 바뀔 때마다 버전 기록까지 통째로 불었다.
+        # 원본은 어차피 Storage 에 gz 로 남고, 필요한 값은 아래처럼 골라 뽑는다.
         extracted = {
-            "product": product,
             # 구독 포함 표시 — 웹이 중첩 JSON 을 못 뒤지므로 최상위에 뽑아 둔다
             **({"subscription": "gamepass"} if _includes_gamepass(product) else {}),
             "price_raw": price,
