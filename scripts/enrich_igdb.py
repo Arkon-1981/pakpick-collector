@@ -19,6 +19,7 @@
 않는다 (30일 뒤 자동 재시도).
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -405,14 +406,31 @@ def main() -> None:
 
     saved = 0
     for i in range(0, len(rows), 200):
-        try:
-            _sb("game_meta", method="POST", body=rows[i : i + 200],
-                extra_headers={"Prefer": "resolution=merge-duplicates"})
-            saved += len(rows[i : i + 200])
-        except Exception as exc:
-            print(f"배치 저장 실패({i}~): {exc}")
-    print(f"완료: 매칭 {len(matched)}개 저장, 실패 기록 {len(misses)}개 "
-          f"(플레이 타임 확보 {len(ttb)}개)")
+        saved += save_rows(rows[i : i + 200])
+    print(f"완료: {saved}/{len(rows)}행 저장 (매칭 {len(matched)} / 실패 기록 {len(misses)} "
+          f"/ 플레이 타임 {len(ttb)})")
+
+
+def save_rows(rows: list[dict]) -> int:
+    """일괄 upsert. 400 이면 반으로 쪼개 원인 행만 고립한다 — 나머지는 전부 저장.
+
+    (실측: 한 행의 값 문제로 배치 전체가 400 을 받으면 원인 행이 로그에 안 남아
+    두 번이나 원인을 못 찾았다. 행 단위까지 내려가 행 JSON 과 응답 본문을 찍는다.)
+    """
+    if not rows:
+        return 0
+    try:
+        _sb("game_meta", method="POST", body=rows,
+            extra_headers={"Prefer": "resolution=merge-duplicates"})
+        return len(rows)
+    except requests.exceptions.HTTPError as exc:
+        body = (exc.response.text[:300] if exc.response is not None else str(exc))
+        if len(rows) == 1:
+            print(f"  ✗ 저장 불가: {json.dumps(rows[0], ensure_ascii=False)[:280]}")
+            print(f"    사유: {body}")
+            return 0
+        mid = len(rows) // 2
+        return save_rows(rows[:mid]) + save_rows(rows[mid:])
 
 
 if __name__ == "__main__":
