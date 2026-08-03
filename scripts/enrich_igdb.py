@@ -222,12 +222,16 @@ def match_steam_by_appid(appids: list[str]) -> dict[str, dict]:
     for i in range(0, len(appids), 100):
         chunk = appids[i : i + 100]
         uids = ",".join(f'"{a}"' for a in chunk)
+        # category 는 IGDB 가 external_game_source 로 개명하며 폐기 중 — 필터 없이
+        # 받아서 양쪽 필드 중 하나라도 Steam(1)이면 인정한다 (실측: 필터식은 0건).
         rows = igdb_query("external_games", (
-            f"fields uid,game; where category = 1 & uid = ({uids}); limit 200;"
+            f"fields uid,game,category,external_game_source; "
+            f"where uid = ({uids}); limit 500;"
         ))
         time.sleep(REQUEST_GAP)
         for r in rows:
-            if r.get("game") and r.get("uid"):
+            src = r.get("external_game_source") or r.get("category")
+            if src == 1 and r.get("game") and r.get("uid"):
                 id_map.setdefault(r["uid"], r["game"])
 
     games: dict[int, dict] = {}
@@ -309,6 +313,9 @@ def fetch_candidates(limit: int) -> list[dict]:
         if len(rows) < 1000:
             break
 
+    # 동시에 수집이 돌면 페이지가 밀려 같은 상품이 두 페이지에 걸쳐 잡힐 수 있다.
+    # 한 배치에 같은 PK 가 두 번 가면 Postgres 가 400 을 던지므로 여기서 걷어낸다.
+    picked = list({c["id"]: c for c in picked}.values())
     # 인기 상위 먼저 (평점·플레이 타임이 가장 많이 보이는 자리), 나머지는 id 순
     picked.sort(key=lambda x: (x["rank"], x["id"]))
     return picked[:limit]
@@ -396,9 +403,14 @@ def main() -> None:
         "enriched_at": now,
     } for c in misses]
 
+    saved = 0
     for i in range(0, len(rows), 200):
-        _sb("game_meta", method="POST", body=rows[i : i + 200],
-            extra_headers={"Prefer": "resolution=merge-duplicates"})
+        try:
+            _sb("game_meta", method="POST", body=rows[i : i + 200],
+                extra_headers={"Prefer": "resolution=merge-duplicates"})
+            saved += len(rows[i : i + 200])
+        except Exception as exc:
+            print(f"배치 저장 실패({i}~): {exc}")
     print(f"완료: 매칭 {len(matched)}개 저장, 실패 기록 {len(misses)}개 "
           f"(플레이 타임 확보 {len(ttb)}개)")
 
