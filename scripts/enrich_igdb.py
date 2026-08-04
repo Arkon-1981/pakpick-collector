@@ -19,6 +19,7 @@
 않는다 (30일 뒤 자동 재시도).
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -222,12 +223,16 @@ def match_steam_by_appid(appids: list[str]) -> dict[str, dict]:
     for i in range(0, len(appids), 100):
         chunk = appids[i : i + 100]
         uids = ",".join(f'"{a}"' for a in chunk)
+        # category 는 IGDB 가 external_game_source 로 개명하며 폐기 중 — 필터 없이
+        # 받아서 양쪽 필드 중 하나라도 Steam(1)이면 인정한다 (실측: 필터식은 0건).
         rows = igdb_query("external_games", (
-            f"fields uid,game; where category = 1 & uid = ({uids}); limit 200;"
+            f"fields uid,game,category,external_game_source; "
+            f"where uid = ({uids}); limit 500;"
         ))
         time.sleep(REQUEST_GAP)
         for r in rows:
-            if r.get("game") and r.get("uid"):
+            src = r.get("external_game_source") or r.get("category")
+            if src == 1 and r.get("game") and r.get("uid"):
                 id_map.setdefault(r["uid"], r["game"])
 
     games: dict[int, dict] = {}
@@ -309,15 +314,25 @@ def fetch_candidates(limit: int) -> list[dict]:
         if len(rows) < 1000:
             break
 
+    # 동시에 수집이 돌면 페이지가 밀려 같은 상품이 두 페이지에 걸쳐 잡힐 수 있다.
+    # 한 배치에 같은 PK 가 두 번 가면 Postgres 가 400 을 던지므로 여기서 걷어낸다.
+    picked = list({c["id"]: c for c in picked}.values())
     # 인기 상위 먼저 (평점·플레이 타임이 가장 많이 보이는 자리), 나머지는 id 순
     picked.sort(key=lambda x: (x["rank"], x["id"]))
     return picked[:limit]
 
 
 def to_hours(seconds) -> float | None:
+    """초 → 시간. 크라우드 데이터라 말이 안 되는 값이 온다.
+
+    (실측: 'Content Warning' 컴플리트 216,228시간 ≈ 25년 — 이 한 행이
+    numeric(6,1) 오버플로(22003)를 내며 배치 전체를 400 으로 죽였다.)
+    HLTB 기준 최장급(방치형/MMO)도 수천 시간 선이라 5,000h 초과는 버린다.
+    """
     if not seconds:
         return None
-    return round(seconds / 3600, 1)
+    hours = round(seconds / 3600, 1)
+    return hours if hours <= 5000 else None
 
 
 def main() -> None:
@@ -396,11 +411,33 @@ def main() -> None:
         "enriched_at": now,
     } for c in misses]
 
+    saved = 0
     for i in range(0, len(rows), 200):
-        _sb("game_meta", method="POST", body=rows[i : i + 200],
+        saved += save_rows(rows[i : i + 200])
+    print(f"완료: {saved}/{len(rows)}행 저장 (매칭 {len(matched)} / 실패 기록 {len(misses)} "
+          f"/ 플레이 타임 {len(ttb)})")
+
+
+def save_rows(rows: list[dict]) -> int:
+    """일괄 upsert. 400 이면 반으로 쪼개 원인 행만 고립한다 — 나머지는 전부 저장.
+
+    (실측: 한 행의 값 문제로 배치 전체가 400 을 받으면 원인 행이 로그에 안 남아
+    두 번이나 원인을 못 찾았다. 행 단위까지 내려가 행 JSON 과 응답 본문을 찍는다.)
+    """
+    if not rows:
+        return 0
+    try:
+        _sb("game_meta", method="POST", body=rows,
             extra_headers={"Prefer": "resolution=merge-duplicates"})
-    print(f"완료: 매칭 {len(matched)}개 저장, 실패 기록 {len(misses)}개 "
-          f"(플레이 타임 확보 {len(ttb)}개)")
+        return len(rows)
+    except requests.exceptions.HTTPError as exc:
+        body = (exc.response.text[:300] if exc.response is not None else str(exc))
+        if len(rows) == 1:
+            print(f"  ✗ 저장 불가: {json.dumps(rows[0], ensure_ascii=False)[:280]}")
+            print(f"    사유: {body}")
+            return 0
+        mid = len(rows) // 2
+        return save_rows(rows[:mid]) + save_rows(rows[mid:])
 
 
 if __name__ == "__main__":
