@@ -244,6 +244,13 @@ class BaseCollector:
         "image_url": 0.80,
         "final_price": 0.90,
     }
+    # 플랫폼별 최저선 예외. 엑스박스는 게임패스 전용·무료 상품(구매 Availability 가
+    # 아예 없어 가격이 정상적으로 비는 상품)이 10% 안팎 섞인다 — 실측 89%가 정상인데
+    # 전역 90% 선에 걸려 8/5부터 매 실행이 '실패'로 표시됐다 (저장은 전부 정상).
+    # 전면 고장(0%대)은 이 완화선에서도 그대로 잡힌다.
+    FIELD_FLOORS_OVERRIDE: dict[str, dict[str, float]] = {
+        "xbox": {"final_price": 0.75},
+    }
     # 채움률 판정에 필요한 최소 표본 (소량 수집에서 오탐 방지)
     FIELD_MIN_SAMPLE = 50
 
@@ -319,9 +326,10 @@ class BaseCollector:
                     for k, v in sorted(rates.items())
                 ),
             )
+        floors = {**self.FIELD_FLOORS, **self.FIELD_FLOORS_OVERRIDE.get(self.platform, {})}
         low = [
             (k, rates[k], floor)
-            for k, floor in self.FIELD_FLOORS.items()
+            for k, floor in floors.items()
             if k in rates
             and self.field_total.get(k, 0) >= self.FIELD_MIN_SAMPLE
             and rates[k] < floor
