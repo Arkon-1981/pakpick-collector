@@ -272,12 +272,26 @@ _ko_lang_id: int | None = None
 
 
 def korean_language_id() -> int | None:
-    """IGDB languages 에서 한국어 id 를 찾는다 (실행당 1회)."""
+    """IGDB languages 에서 한국어 id 를 찾는다 (실행당 1회).
+
+    locale 표기가 'ko'인지 'ko-KR'인지 문서가 불분명 — where 필터로 찍지 말고
+    목록(수십 건)을 통째로 받아 유연하게 찾는다. (실측: 'ko' 정확 일치 필터는
+    0건이 나와 전체가 '지원 없음'으로 오염된 적 있다.)
+    """
     global _ko_lang_id
     if _ko_lang_id is None:
-        rows = igdb_query("languages", 'fields id,locale; where locale = "ko"; limit 1;')
+        rows = igdb_query("languages", "fields id,name,native_name,locale; limit 200;")
         time.sleep(REQUEST_GAP)
-        _ko_lang_id = rows[0]["id"] if rows else 0   # 0 = 조회 실패(스킵)
+        _ko_lang_id = 0
+        for r in rows:
+            loc = (r.get("locale") or "").lower()
+            name = (r.get("name") or "").lower()
+            if loc == "ko" or loc.startswith("ko-") or loc.startswith("ko_") or name == "korean":
+                _ko_lang_id = r["id"]
+                break
+        if not _ko_lang_id:
+            print(f"※ 한국어 언어 id 못 찾음 — languages {len(rows)}건 locale: "
+                  + ", ".join(str(r.get("locale")) for r in rows[:40]))
     return _ko_lang_id or None
 
 
@@ -307,10 +321,16 @@ def ko_backfill() -> None:
     015 SQL(ko_support 컬럼) 실행 후에 돌린다. 이후 신규 매칭분은
     본 실행이 저장 시점에 함께 채우므로 다시 돌릴 일이 없다.
     """
+    if not korean_language_id():
+        print("한국어 언어 id 조회 실패 — 오염 방지를 위해 중단")
+        sys.exit(1)
     rows: list[dict] = []
     for offset in range(0, 100_000, 1000):
+        # null(미조회)뿐 아니라 빈 배열도 다시 본다 — 언어 id 조회 실패로
+        # '지원 없음'이 잘못 찍힌 행을 스스로 복구할 수 있게.
         page = _sb("game_meta?select=store_item_id,igdb_id&igdb_id=not.is.null"
-                   f"&ko_support=is.null&limit=1000&offset={offset}") or []
+                   "&or=(ko_support.is.null,ko_support.eq.%7B%7D)"
+                   f"&limit=1000&offset={offset}") or []
         rows += page
         if len(page) < 1000:
             break
@@ -450,7 +470,9 @@ def main() -> None:
 
     matched_ids = sorted({g["id"] for _, g, _ in matched})
     ttb = fetch_ttb(matched_ids)
-    ko = fetch_ko_support(matched_ids)
+    # 언어 id 조회가 실패하면 null 로 남긴다 — '지원 없음([])'으로 오염 금지
+    ko_ok = korean_language_id() is not None
+    ko = fetch_ko_support(matched_ids) if ko_ok else {}
 
     if args.dry_run:
         print(f"완료(dry-run): 매칭 {len(matched)} / 실패 {len(misses)} / TTB {len(ttb)} / 한국어 {len(ko)}")
@@ -474,7 +496,7 @@ def main() -> None:
             "ttb_completely_h": to_hours(t.get("completely")),
             "genres": [x["name"] for x in g.get("genres") or []] or None,
             # 빈 배열 = '조회했지만 지원 없음' (null 은 '아직 안 봄' — 백필 대상)
-            "ko_support": ko.get(g["id"], []),
+            "ko_support": ko.get(g["id"], []) if ko_ok else None,
             "enriched_at": now,
         })
     # PostgREST 일괄 insert 는 모든 행의 키가 같아야 한다 — 실패 행도 전체 키로
