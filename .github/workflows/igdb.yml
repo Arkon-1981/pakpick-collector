@@ -22,6 +22,10 @@ on:
         description: "true 면 저장하지 않고 매칭 결과만 출력"
         required: false
         default: "false"
+      ko_backfill:
+        description: "true 면 기존 매칭분의 한국어 지원(ko_support)만 채움 (015 SQL 이후 일회성)"
+        required: false
+        default: "false"
 
 jobs:
   enrich:
@@ -50,6 +54,7 @@ jobs:
           python scripts/enrich_igdb.py
           --limit ${{ github.event.inputs.limit || '200' }}
           ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+          ${{ github.event.inputs.ko_backfill == 'true' && '--ko-backfill' || '' }}
       - name: 키 없음 안내
         if: env.TWITCH_CLIENT_ID == ''
         run: echo "TWITCH_CLIENT_ID 가 없어 IGDB 보강을 건너뜁니다."
