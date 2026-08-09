@@ -193,7 +193,9 @@ def search_game(title: str) -> tuple[dict | None, str]:
             if accept & keys:
                 return row, "fuzzy"
 
-        # 완전 일치가 없으면: 후보가 하나뿐이고 토큰이 포함 관계일 때만 (보수적)
+        # 완전 일치가 없으면: 후보가 하나뿐이고 토큰이 포함 관계일 때만 (보수적).
+        # 공유 토큰이 1개뿐이면 거른다 — '진・삼국무쌍: ORIGINS' 이 흔한 단어
+        # 하나('Origins')로 엉뚱한 게임에 붙은 실측 오매칭이 있다.
         if len(rows) == 1:
             row = rows[0]
             names = [row.get("name") or ""] + [
@@ -202,7 +204,7 @@ def search_game(title: str) -> tuple[dict | None, str]:
             w = set(want.split())
             for n in names:
                 c = set(norm(n).split())
-                if w and c and (w <= c or c <= w):
+                if w and c and (w <= c or c <= w) and min(len(w), len(c)) >= 2:
                     return row, "fuzzy"
     return None, "none"
 
@@ -262,6 +264,71 @@ def fetch_ttb(game_ids: list[int]) -> dict[int, dict]:
         for r in rows:
             out[r["game_id"]] = r
     return out
+
+
+# language_support_type: 1=음성(더빙), 2=자막, 3=인터페이스
+_KO_TYPE = {1: "audio", 2: "subtitles", 3: "interface"}
+_ko_lang_id: int | None = None
+
+
+def korean_language_id() -> int | None:
+    """IGDB languages 에서 한국어 id 를 찾는다 (실행당 1회)."""
+    global _ko_lang_id
+    if _ko_lang_id is None:
+        rows = igdb_query("languages", 'fields id,locale; where locale = "ko"; limit 1;')
+        time.sleep(REQUEST_GAP)
+        _ko_lang_id = rows[0]["id"] if rows else 0   # 0 = 조회 실패(스킵)
+    return _ko_lang_id or None
+
+
+def fetch_ko_support(game_ids: list[int]) -> dict[int, list[str]]:
+    """한국어 지원 형태. {igdb_id: ['audio','subtitles','interface'] 부분집합}"""
+    ko = korean_language_id()
+    if not ko or not game_ids:
+        return {}
+    out: dict[int, set[str]] = {}
+    for i in range(0, len(game_ids), 100):
+        chunk = game_ids[i : i + 100]
+        rows = igdb_query("language_supports", (
+            "fields game,language,language_support_type; "
+            f"where game = ({','.join(map(str, chunk))}) & language = {ko}; limit 500;"
+        ))
+        time.sleep(REQUEST_GAP)
+        for r in rows:
+            t = _KO_TYPE.get(r.get("language_support_type"))
+            if t:
+                out.setdefault(r["game"], set()).add(t)
+    return {g: sorted(v) for g, v in out.items()}
+
+
+def ko_backfill() -> None:
+    """이미 매칭된 game_meta 행 중 ko_support 가 비어 있는 것을 채운다 (일회성).
+
+    015 SQL(ko_support 컬럼) 실행 후에 돌린다. 이후 신규 매칭분은
+    본 실행이 저장 시점에 함께 채우므로 다시 돌릴 일이 없다.
+    """
+    rows: list[dict] = []
+    for offset in range(0, 100_000, 1000):
+        page = _sb("game_meta?select=store_item_id,igdb_id&igdb_id=not.is.null"
+                   f"&ko_support=is.null&limit=1000&offset={offset}") or []
+        rows += page
+        if len(page) < 1000:
+            break
+    gids = sorted({r["igdb_id"] for r in rows})
+    print(f"백필 대상 {len(rows)}행 (게임 {len(gids)}개)")
+    ko = fetch_ko_support(gids)
+    # 지원 정보가 없는 게임은 빈 배열로 채워 '조회했지만 없음'과 '아직 안 봄'을 구분
+    body = [{"store_item_id": r["store_item_id"],
+             "ko_support": ko.get(r["igdb_id"], [])} for r in rows]
+    saved = 0
+    for i in range(0, len(body), 200):
+        try:
+            _sb("game_meta", method="POST", body=body[i : i + 200],
+                extra_headers={"Prefer": "resolution=merge-duplicates"})
+            saved += len(body[i : i + 200])
+        except requests.exceptions.HTTPError as exc:
+            print(f"백필 배치 실패({i}~): {exc.response.text[:200] if exc.response is not None else exc}")
+    print(f"백필 완료: {saved}/{len(body)}행 (한국어 지원 확인 {len(ko)}게임)")
 
 
 # ------------------------------------------------------------------
@@ -339,12 +406,18 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--ko-backfill", action="store_true",
+                    help="기존 매칭분의 ko_support 채우기 (015 SQL 이후 일회성)")
     args = ap.parse_args()
 
     if not (SUPABASE_URL and SUPABASE_KEY and TWITCH_ID and TWITCH_SECRET):
         print("환경변수(SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / "
               "TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET)가 필요합니다.")
         sys.exit(1)
+
+    if args.ko_backfill:
+        ko_backfill()
+        return
 
     cands = fetch_candidates(args.limit)
     print(f"후보 {len(cands)}개 (인기 순위 → 정가 순)")
@@ -375,10 +448,12 @@ def main() -> None:
             matched.append((c, game, conf))
             print(f"  ✓ {conf:5} [{c['platform']}] {c['title'][:34]:34} → {game['name'][:40]}")
 
-    ttb = fetch_ttb(sorted({g["id"] for _, g, _ in matched}))
+    matched_ids = sorted({g["id"] for _, g, _ in matched})
+    ttb = fetch_ttb(matched_ids)
+    ko = fetch_ko_support(matched_ids)
 
     if args.dry_run:
-        print(f"완료(dry-run): 매칭 {len(matched)} / 실패 {len(misses)} / TTB {len(ttb)}")
+        print(f"완료(dry-run): 매칭 {len(matched)} / 실패 {len(misses)} / TTB {len(ttb)} / 한국어 {len(ko)}")
         return
 
     now = datetime.now(timezone.utc).isoformat()
@@ -398,6 +473,8 @@ def main() -> None:
             "ttb_normally_h": to_hours(t.get("normally")),
             "ttb_completely_h": to_hours(t.get("completely")),
             "genres": [x["name"] for x in g.get("genres") or []] or None,
+            # 빈 배열 = '조회했지만 지원 없음' (null 은 '아직 안 봄' — 백필 대상)
+            "ko_support": ko.get(g["id"], []),
             "enriched_at": now,
         })
     # PostgREST 일괄 insert 는 모든 행의 키가 같아야 한다 — 실패 행도 전체 키로
@@ -408,6 +485,7 @@ def main() -> None:
         "user_rating": None, "user_rating_count": None,
         "ttb_hastily_h": None, "ttb_normally_h": None, "ttb_completely_h": None,
         "genres": None,
+        "ko_support": None,
         "enriched_at": now,
     } for c in misses]
 
@@ -415,7 +493,7 @@ def main() -> None:
     for i in range(0, len(rows), 200):
         saved += save_rows(rows[i : i + 200])
     print(f"완료: {saved}/{len(rows)}행 저장 (매칭 {len(matched)} / 실패 기록 {len(misses)} "
-          f"/ 플레이 타임 {len(ttb)})")
+          f"/ 플레이 타임 {len(ttb)} / 한국어 지원 {len(ko)})")
 
 
 def save_rows(rows: list[dict]) -> int:
