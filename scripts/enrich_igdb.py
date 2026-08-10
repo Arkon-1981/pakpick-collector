@@ -147,15 +147,28 @@ def igdb_headers() -> dict:
 
 
 def igdb_query(endpoint: str, body: str) -> list[dict]:
-    """IGDB 쿼리 1회. 429 는 잠깐 쉬고 재시도."""
-    for attempt in range(4):
-        r = requests.post(f"{IGDB}/{endpoint}", headers=igdb_headers(),
-                          data=body.encode("utf-8"), timeout=30)
-        if r.status_code == 429:
+    """IGDB 쿼리 1회. 429(한도)·5xx(일시 오류)·네트워크 예외는 백오프 후 재시도.
+
+    예전엔 429만 재시도하고 500/502/연결오류는 즉시 raise 로 전파돼, 보강 도중
+    IGDB 가 한 번만 흔들려도 실행 전체가 죽고 그때까지 매칭 결과가 통째로 유실됐다.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(5):
+        try:
+            r = requests.post(f"{IGDB}/{endpoint}", headers=igdb_headers(),
+                              data=body.encode("utf-8"), timeout=30)
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
             time.sleep(2 * (attempt + 1))
+            continue
+        if r.status_code == 429 or r.status_code >= 500:
+            time.sleep(2 * (attempt + 1))
+            last_exc = requests.exceptions.HTTPError(f"IGDB {r.status_code}")
             continue
         r.raise_for_status()
         return r.json()
+    if last_exc:
+        raise last_exc
     return []
 
 
@@ -459,8 +472,14 @@ def main() -> None:
         game, conf = None, "exact"
         if c["platform"] == "steam":   # nsuid 등 타 플랫폼 숫자 ID 와 충돌 방지
             game = steam_map.get(c["pid"])
-        if game is None:
-            game, conf = search_game(c["title"])
+        try:
+            if game is None:
+                game, conf = search_game(c["title"])
+        except Exception as exc:
+            # 한 상품의 검색 실패가 실행 전체를 죽이지 않게 — 이 상품만 건너뛴다
+            # (miss 로도 남기지 않는다: 일시 오류라 다음 실행에서 다시 시도해야 함)
+            print(f"  ! 검색오류 skip: [{c['platform']}] {c['title'][:40]} ({exc})")
+            continue
         if game is None:
             misses.append(c)
             print(f"  · miss: [{c['platform']}] {c['title'][:44]}")
@@ -469,10 +488,19 @@ def main() -> None:
             print(f"  ✓ {conf:5} [{c['platform']}] {c['title'][:34]:34} → {game['name'][:40]}")
 
     matched_ids = sorted({g["id"] for _, g, _ in matched})
-    ttb = fetch_ttb(matched_ids)
+    # 보조 조회가 최종 실패해도 매칭 결과 자체는 저장한다 (전부 잃는 것보다 낫다)
+    try:
+        ttb = fetch_ttb(matched_ids)
+    except Exception as exc:
+        print(f"  ! TTB 조회 실패 — 플레이타임 없이 저장 ({exc})")
+        ttb = {}
     # 언어 id 조회가 실패하면 null 로 남긴다 — '지원 없음([])'으로 오염 금지
-    ko_ok = korean_language_id() is not None
-    ko = fetch_ko_support(matched_ids) if ko_ok else {}
+    try:
+        ko_ok = korean_language_id() is not None
+        ko = fetch_ko_support(matched_ids) if ko_ok else {}
+    except Exception as exc:
+        print(f"  ! 한국어 지원 조회 실패 — null 로 저장 ({exc})")
+        ko_ok, ko = False, {}
 
     if args.dry_run:
         print(f"완료(dry-run): 매칭 {len(matched)} / 실패 {len(misses)} / TTB {len(ttb)} / 한국어 {len(ko)}")

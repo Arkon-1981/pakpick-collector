@@ -202,19 +202,23 @@ def main() -> None:
             continue
         print(f"  ✓ {c['title'][:34]:34} → {summary}")
         if not args.dry_run:
-            _sb(
-                "ai_reviews",
-                method="POST",
-                body={
-                    "store_item_id": c["id"],
-                    "summary": summary,
-                    "sources": [],
-                    "model": args.model,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                },
-                extra_headers={"Prefer": "resolution=merge-duplicates"},
-            )
-            made += 1
+            try:
+                _sb(
+                    "ai_reviews",
+                    method="POST",
+                    body={
+                        "store_item_id": c["id"],
+                        "summary": summary,
+                        "sources": [],
+                        "model": args.model,
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    extra_headers={"Prefer": "resolution=merge-duplicates"},
+                )
+                made += 1
+            except Exception as exc:
+                # 저장 1건 실패로 남은 후보의 Gemini 쿼터를 날리지 않는다 — 이 건만 건너뜀
+                print(f"  ! 저장 실패 skip: {c['title'][:36]} ({exc})")
         time.sleep(args.sleep)
 
     print(f"완료: {made}개 저장{' (dry-run)' if args.dry_run else ''}")

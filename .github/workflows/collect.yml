@@ -27,6 +27,9 @@ on:
         type: choice
         options: [all, nintendo, playstation, xbox, steam, gear]
 
+permissions:
+  contents: read
+
 jobs:
   collect:
     runs-on: ubuntu-latest
