@@ -123,10 +123,84 @@ def test_ps_keep_meta() -> None:
     check("PS: 신규 상품은 예외 없이 통과", item3.extracted_data == {})
 
 
+# ---------------------------------------------------------------- 병합 저장(A안)
+def test_xbox_empty_page_is_failure() -> None:
+    """종류 페이지가 200 이지만 상품 0건이면 '실패'로 봐야 한다.
+
+    정상 이탈로 오판하면 그 종류 표시가 카탈로그 전체에서 지워진다
+    (실측: free 페이지 200/0건 → 무료 표시 50개 전멸).
+    """
+    import collectors.xbox as x
+
+    col = x.XboxCollector.__new__(x.XboxCollector)
+    col.pages_found = 0
+    col.save_raw = lambda *a, **k: 1
+    errors: list[str] = []
+    col.record_parse_error = lambda url, msg, details=None: errors.append(msg)
+
+    # 첫 페이지는 빈 응답(200), 나머지는 상품 1개
+    # 실제 스토어 마크업 형식: "productId":"<12자>"  (형식이 다르면 0건이 되어
+    # 테스트가 '전부 실패'로 통과해 버리므로 실제 정규식과 맞춘다)
+    def fake_fetch(url, **kw):
+        empty = "coming-soon" in url          # upcoming 만 빈 페이지
+        text = "" if empty else '"productId":"9nabcdefghij"'
+        return MagicMock(status_code=200, text=text)
+
+    with patch.object(x, "fetch", side_effect=fake_fetch):
+        kinds, ranks, failed = col._fetch_release_kinds()
+    check("xbox: 200/0건 페이지는 failed 로 표시", "upcoming" in failed)
+    check("xbox: 0건 페이지는 오류로 기록", any("0건" in m for m in errors))
+    check("xbox: 정상 페이지는 failed 아님", "new" not in failed)
+
+
+def test_merge_current_data() -> None:
+    """current_data 병합 — 경로가 안 챙긴 보강 값을 자동 보존한다."""
+    from db.repository import merge_current_data as merge
+
+    # 신규 상품(직전 값 없음)은 그대로
+    check("merge: 직전 값 없으면 새 값 그대로", merge(None, {"a": 1}) == {"a": 1})
+
+    # 보강 값: new 가 비었으면 old 유지, 있으면 new 우선
+    old = {"release_date": "2023-01-01", "publisher": "Sony", "genres": ["액션"],
+           "content_type": "game"}
+    out = merge(old, {"price_raw": {"f": 100}})       # 할인 경로: 가격만
+    check("merge: 출시일 보존", out["release_date"] == "2023-01-01")
+    check("merge: 퍼블리셔 보존", out["publisher"] == "Sony")
+    check("merge: 장르 보존", out["genres"] == ["액션"])
+    check("merge: DLC 판별 보존", out["content_type"] == "game")
+    check("merge: 새 값(가격)은 그대로", out["price_raw"] == {"f": 100})
+
+    out2 = merge(old, {"release_date": "2024-12-31"})
+    check("merge: 새 값이 있으면 최신 우선", out2["release_date"] == "2024-12-31")
+
+    # 갤러리: 목록 파서가 대표 1장만 넣어도 스샷 6장이 살아남아야 한다
+    out3 = merge({"gallery": ["a", "b", "c", "d", "e", "f"]}, {"gallery": ["a"]})
+    check("merge: 갤러리는 더 긴 쪽 유지", len(out3["gallery"]) == 6)
+    out4 = merge({"gallery": ["a"]}, {"gallery": ["a", "b", "c"]})
+    check("merge: 새 갤러리가 더 길면 새 것", len(out4["gallery"]) == 3)
+
+    # 상태성 필드는 병합 대상이 아니다 — 목록에서 이탈하면 지워져야 한다
+    out5 = merge({"content_kind": "new", "popular_rank": 3, "subscription": "gamepass"},
+                 {"price_raw": {}})
+    check("merge: content_kind 는 유지하지 않는다(정상 이탈 반영)",
+          "content_kind" not in out5)
+    check("merge: popular_rank 는 유지하지 않는다", "popular_rank" not in out5)
+    check("merge: subscription 은 유지하지 않는다(게임패스 이탈 반영)",
+          "subscription" not in out5)
+
+    # 원본을 변형하지 않는다 (호출자가 재사용해도 안전)
+    src_old, src_new = {"publisher": "P"}, {"x": 1}
+    merge(src_old, src_new)
+    check("merge: 입력 dict 를 변형하지 않는다",
+          src_old == {"publisher": "P"} and src_new == {"x": 1})
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_steam_enrich_fallback()
     test_ps_keep_meta()
+    test_xbox_empty_page_is_failure()
+    test_merge_current_data()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))

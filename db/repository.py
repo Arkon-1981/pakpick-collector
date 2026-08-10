@@ -332,6 +332,47 @@ def find_item_id(platform: str, store_region: str, store_product_id: str) -> int
     return res.data[0]["id"] if res.data else None
 
 
+# ---------------------------------------------------------------------------
+# current_data 병합 (필드 유실 근본 해결 — docs/current_data_merge_design.md)
+# ---------------------------------------------------------------------------
+# 저장은 current_data 를 통째로 교체하므로, 다른 경로/직전 실행이 채운 보강 값이
+# 지워졌다(갤러리·출시일·DLC판별…). 경로마다 손으로 되살리던 것을 여기 한 곳에서
+# 자동 처리한다.
+#
+# 병합 대상 = '한 번 얻으면 계속 유효한 보강 값'. new 가 비어 있으면 old 를 유지한다.
+# 상태성 필드(content_kind·popular_rank·subscription)는 **일부러 제외**한다 —
+# "지금 어느 목록에 속하는가"라서 매 실행 재계산돼야 하고, 유지해 버리면 목록에서
+# 정상 이탈한 상품의 표시가 영구히 남는다(파서가 '없음'을 명시하지 않기 때문).
+MERGE_FILL_KEYS: tuple[str, ...] = (
+    "release_date", "publisher", "developer", "content_type", "content_rating",
+    "short_description", "top_category", "store_classification",
+    "platform_generation", "review", "korean", "is_f2p", "gold_required",
+    "genres", "players", "platforms", "publishers", "developers", "franchises",
+)
+# 프리페치할 키 = 병합에 필요한 전부 (gallery 는 길이 비교용으로 따로 쓴다)
+MERGE_KEYS: list[str] = [*MERGE_FILL_KEYS, "gallery"]
+
+
+def merge_current_data(old: dict | None, new: dict) -> dict:
+    """직전 current_data(old)의 보강 값을 살려 새 값(new)과 합친다.
+
+    · 보강 키: new 가 비었으면 old 유지 (있으면 new 우선 — 최신 값이 옳다)
+    · gallery: '더 긴 쪽' 유지 — 목록 파서가 대표 1장만 넣기 때문에 단순 우선순위로는
+      스크린샷이 계속 1장으로 되돌아간다(실측된 유실 경로)
+    · 그 외(price_raw·node 등)는 new 를 그대로 둔다 (매번 새로 오는 값)
+    """
+    if not old:
+        return new
+    out = dict(new)
+    for k in MERGE_FILL_KEYS:
+        if not out.get(k) and old.get(k) is not None:
+            out[k] = old[k]
+    old_gallery = old.get("gallery")
+    if isinstance(old_gallery, list) and len(old_gallery) > len(out.get("gallery") or []):
+        out["gallery"] = old_gallery
+    return out
+
+
 def fetch_item_meta(platform: str, store_region: str, keys: list[str]) -> dict[str, dict]:
     """저장된 상품들의 current_data 중 지정한 키만 뽑아 {상품ID: {키: 값}} 으로 돌려준다.
 
@@ -427,6 +468,7 @@ def upsert_store_item(
     raw_document_id: int | None,
     id_cache: dict[str, int] | None = None,
     touch_queue: list[int] | None = None,
+    prev_data: dict | None = None,
 ) -> int:
     """상품 기본 정보를 저장/갱신하고, 내용이 바뀌었으면 버전 기록도 남긴다.
 
@@ -435,8 +477,12 @@ def upsert_store_item(
       새로 넣은 상품은 캐시에 바로 반영해 같은 실행 안에서도 일관된다.
     touch_queue: 버전 행의 last_seen_at 갱신을 여기 모아 두면 호출자가 한 번에 처리한다.
       내용이 안 바뀐 상품마다 PATCH 를 보내면 실측 1,674회가 더 붙는다.
+    prev_data: 이 상품의 직전 current_data(보강 키만). 주면 보강 값을 살려 병합한다
+      — 경로가 안 챙긴 갤러리·출시일 등이 지워지는 것을 구조적으로 막는다.
+      호출자(base.save_item)가 실행 시작에 한 번 프리페치한 값을 넘긴다.
     """
     client = get_client()
+    extracted_data = merge_current_data(prev_data, extracted_data)
 
     # (platform, store_region, store_product_id) 유니크 제약을 이용한 원자적 upsert.
     # 예전엔 'SELECT 로 id 찾기 → UPDATE 또는 INSERT' 분기였는데, 같은 플랫폼
