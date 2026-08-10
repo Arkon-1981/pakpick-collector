@@ -438,74 +438,44 @@ def upsert_store_item(
     """
     client = get_client()
 
-    item_id = id_cache.get(store_product_id) if id_cache is not None else None
-    if item_id is None:
-        existing = (
-            client.table("store_items")
-            .select("id")
-            .eq("platform", platform)
-            .eq("store_region", store_region)
-            .eq("store_product_id", store_product_id)
-            .limit(1)
-            .execute()
-        )
-        item_id = existing.data[0]["id"] if existing.data else None
+    # (platform, store_region, store_product_id) 유니크 제약을 이용한 원자적 upsert.
+    # 예전엔 'SELECT 로 id 찾기 → UPDATE 또는 INSERT' 분기였는데, 같은 플랫폼
+    # 워크플로가 겹쳐 돌면 둘 다 '없음'으로 보고 INSERT 해 중복 행/오류가 났다.
+    # upsert 는 DB 가 충돌을 처리하므로 레이스가 없고, 캐시 미스 시의 SELECT 도 사라진다.
+    res = client.table("store_items").upsert(
+        {
+            "platform": platform,
+            "store_region": store_region,
+            "store_product_id": store_product_id,
+            "title": title,
+            "store_url": store_url,
+            "image_url": image_url,
+            "current_data": extracted_data,
+            "last_seen_at": _now(),
+            "updated_at": _now(),
+        },
+        on_conflict="platform,store_region,store_product_id",
+    ).execute()
+    item_id = res.data[0]["id"]
+    if id_cache is not None:
+        id_cache[store_product_id] = item_id
 
-    if item_id is not None:
-        client.table("store_items").update(
-            {
-                "title": title,
-                "store_url": store_url,
-                "image_url": image_url,
-                "current_data": extracted_data,
-                "last_seen_at": _now(),
-                "updated_at": _now(),
-            }
-        ).eq("id", item_id).execute()
-    else:
-        res = client.table("store_items").insert(
-            {
-                "platform": platform,
-                "store_region": store_region,
-                "store_product_id": store_product_id,
-                "title": title,
-                "store_url": store_url,
-                "image_url": image_url,
-                "current_data": extracted_data,
-            }
-        ).execute()
-        item_id = res.data[0]["id"]
-        # 같은 실행 안에서 이 상품을 또 만나면 중복 insert 가 되지 않게 캐시에 넣는다
-        if id_cache is not None:
-            id_cache[store_product_id] = item_id
-
-    # 상품 정보 버전 기록 — 내용 해시가 같으면 last_seen_at만 갱신
+    # 상품 정보 버전 기록 — (store_item_id, data_hash) 유니크 제약을 이용해
+    # upsert 한 방으로 처리한다. 내용이 같으면 그 행의 last_seen_at 만 갱신되고,
+    # 다르면 새 행이 들어간다. 예전의 'SELECT 후 분기'를 없애 상품당 조회 1회가
+    # 사라지고(N+1 완화), 동시 실행이 겹쳐도 DB 가 중복을 막아 레이스가 없다.
+    # (touch_queue 는 하위호환용으로 남겨 두지만 이 경로에선 쓰지 않는다.)
     data_hash = sha256_json(extracted_data)
-    existing_version = (
-        client.table("store_item_versions")
-        .select("id")
-        .eq("store_item_id", item_id)
-        .eq("data_hash", data_hash)
-        .limit(1)
-        .execute()
-    )
-    if existing_version.data:
-        vid = existing_version.data[0]["id"]
-        if touch_queue is not None:
-            touch_queue.append(vid)   # 호출자가 한 번에 갱신 (요청 수 절감)
-        else:
-            client.table("store_item_versions").update(
-                {"last_seen_at": _now()}
-            ).eq("id", vid).execute()
-    else:
-        client.table("store_item_versions").insert(
-            {
-                "store_item_id": item_id,
-                "raw_document_id": raw_document_id,
-                "data_hash": data_hash,
-                "extracted_data": extracted_data,
-            }
-        ).execute()
+    client.table("store_item_versions").upsert(
+        {
+            "store_item_id": item_id,
+            "raw_document_id": raw_document_id,
+            "data_hash": data_hash,
+            "extracted_data": extracted_data,
+            "last_seen_at": _now(),
+        },
+        on_conflict="store_item_id,data_hash",
+    ).execute()
 
     return item_id
 

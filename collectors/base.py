@@ -130,14 +130,12 @@ class BaseCollector:
         )
 
     def _ensure_id_cache(self) -> dict[str, int]:
-        """상품ID→내부 id 매핑을 한 번만 받아 둔다 (실패하면 빈 캐시로 진행)."""
+        """상품ID→내부 id 매핑 캐시. upsert(on_conflict)가 id 를 돌려주므로 더는
+        시작 시 전체(최대 2만 행)를 미리 받지 않는다 — 그 프리페치는 순수 낭비였다.
+        캐시는 실행 중 upsert 결과로 채워지며, 지금은 참조하는 곳이 없어도
+        하위호환을 위해 빈 dict 로 유지한다."""
         if self._id_cache is None:
-            try:
-                self._id_cache = repository.item_id_map(self.platform, config.STORE_REGION)
-                logger.info("[%s] 기존 상품 %d개 색인", self.platform, len(self._id_cache))
-            except Exception:
-                logger.exception("[%s] 상품 색인 실패 — 개별 조회로 진행", self.platform)
-                self._id_cache = {}
+            self._id_cache = {}
         return self._id_cache
 
     def flush_deferred(self) -> None:
