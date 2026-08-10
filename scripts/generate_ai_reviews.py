@@ -21,8 +21,12 @@ import re
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common.monitoring import capture, init_sentry  # noqa: E402
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -186,6 +190,7 @@ def main() -> None:
     ap.add_argument("--model", default="gemini-flash-lite-latest")
     ap.add_argument("--sleep", type=float, default=6.0, help="호출 간 대기(초)")
     args = ap.parse_args()
+    init_sentry("ai-reviews")
 
     if not (SUPABASE_URL and SUPABASE_KEY and GEMINI_KEY):
         print("환경변수(SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / GEMINI_API_KEY)가 필요합니다.")
@@ -219,6 +224,7 @@ def main() -> None:
             except Exception as exc:
                 # 저장 1건 실패로 남은 후보의 Gemini 쿼터를 날리지 않는다 — 이 건만 건너뜀
                 print(f"  ! 저장 실패 skip: {c['title'][:36]} ({exc})")
+                capture(exc, store_item_id=c["id"])
         time.sleep(args.sleep)
 
     print(f"완료: {made}개 저장{' (dry-run)' if args.dry_run else ''}")

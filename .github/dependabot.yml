@@ -1,0 +1,26 @@
+# 의존성 취약점·업데이트 자동 PR.
+# 매주 묶어서 올려 PR 홍수를 막는다(무료, 설정만으로 동작).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      # 마이너/패치는 한 PR 로 묶는다 — 리뷰 부담 최소화
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "deps(actions)"

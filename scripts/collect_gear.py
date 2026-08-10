@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common import coupang                       # noqa: E402
 from common.logging_util import get_logger       # noqa: E402
+from common.monitoring import init_sentry  # noqa: E402
 from db.client import get_client                 # noqa: E402
 from parsers.coupang import (  # noqa: E402
     MAX_PRICE, MIN_PRICE, PRICE_RANGES, GearRow, to_row,
@@ -388,6 +389,7 @@ def sweep_out_of_range() -> int:
 
 
 def main() -> int:
+    init_sentry("gear")
     ap = argparse.ArgumentParser(description="Pakpick 주변기기 수집 (쿠팡 파트너스)")
     ap.add_argument("--dry-run", action="store_true", help="저장하지 않고 결과만 본다")
     ap.add_argument("--keyword", help="이 검색어 하나만")

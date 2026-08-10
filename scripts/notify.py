@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pywebpush import WebPushException, webpush  # noqa: E402
 
 from common.logging_util import get_logger  # noqa: E402
+from common.monitoring import init_sentry  # noqa: E402
 from db.client import get_client  # noqa: E402
 
 logger = get_logger(__name__)
@@ -125,6 +126,7 @@ def build_digest(rows: list[dict]) -> dict:
 
 
 def main() -> int:
+    init_sentry("notify")
     if not VAPID_PRIVATE_KEY:
         logger.error("VAPID_PRIVATE_KEY 가 없습니다 — 발송을 건너뜁니다")
         return 0  # 설정 전에는 수집 워크플로를 실패시키지 않는다
