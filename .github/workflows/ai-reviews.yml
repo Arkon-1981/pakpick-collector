@@ -19,6 +19,9 @@ on:
         required: false
         default: "60"
 
+permissions:
+  contents: read
+
 jobs:
   generate:
     runs-on: ubuntu-latest
@@ -31,8 +34,12 @@ jobs:
           cache: pip
       - run: pip install requests
       - name: AI 리뷰 생성
+        # 자유입력(limit)은 env 로 받아 숫자만 남겨 쓴다 (run: 직접 전개 = 명령 주입)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python scripts/generate_ai_reviews.py --limit ${{ github.event.inputs.limit || '60' }} --sleep 5
+          LIMIT_IN: ${{ github.event.inputs.limit || '60' }}
+        run: |
+          LIMIT="$(printf '%s' "$LIMIT_IN" | tr -cd '0-9')"
+          python scripts/generate_ai_reviews.py --limit "${LIMIT:-60}" --sleep 5

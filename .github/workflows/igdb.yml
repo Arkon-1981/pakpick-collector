@@ -27,6 +27,9 @@ on:
         required: false
         default: "false"
 
+permissions:
+  contents: read
+
 jobs:
   enrich:
     runs-on: ubuntu-latest
@@ -47,14 +50,21 @@ jobs:
       - run: pip install requests
       - name: IGDB 보강
         if: env.TWITCH_CLIENT_ID != ''
+        # 자유입력(limit)을 run: 에 직접 전개하면 셸 명령 주입이 된다.
+        # env 로 받아 인용 참조하고, 숫자만 남긴다.
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: >
-          python scripts/enrich_igdb.py
-          --limit ${{ github.event.inputs.limit || '200' }}
-          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
-          ${{ github.event.inputs.ko_backfill == 'true' && '--ko-backfill' || '' }}
+          LIMIT_IN: ${{ github.event.inputs.limit || '200' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          KO_BACKFILL: ${{ github.event.inputs.ko_backfill || 'false' }}
+        run: |
+          LIMIT="$(printf '%s' "$LIMIT_IN" | tr -cd '0-9')"
+          LIMIT="${LIMIT:-200}"
+          ARGS=(--limit "$LIMIT")
+          [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+          [ "$KO_BACKFILL" = "true" ] && ARGS+=(--ko-backfill)
+          python scripts/enrich_igdb.py "${ARGS[@]}"
       - name: 키 없음 안내
         if: env.TWITCH_CLIENT_ID == ''
         run: echo "TWITCH_CLIENT_ID 가 없어 IGDB 보강을 건너뜁니다."

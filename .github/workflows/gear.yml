@@ -33,6 +33,9 @@ on:
     - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   gear:
     runs-on: ubuntu-latest
