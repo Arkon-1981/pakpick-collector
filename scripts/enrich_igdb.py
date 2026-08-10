@@ -26,8 +26,12 @@ import sys
 import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import requests
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common.monitoring import capture, init_sentry  # noqa: E402
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
@@ -442,6 +446,7 @@ def main() -> None:
     ap.add_argument("--ko-backfill", action="store_true",
                     help="기존 매칭분의 ko_support 채우기 (015 SQL 이후 일회성)")
     args = ap.parse_args()
+    init_sentry("igdb")
 
     if not (SUPABASE_URL and SUPABASE_KEY and TWITCH_ID and TWITCH_SECRET):
         print("환경변수(SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / "
@@ -479,6 +484,7 @@ def main() -> None:
             # 한 상품의 검색 실패가 실행 전체를 죽이지 않게 — 이 상품만 건너뛴다
             # (miss 로도 남기지 않는다: 일시 오류라 다음 실행에서 다시 시도해야 함)
             print(f"  ! 검색오류 skip: [{c['platform']}] {c['title'][:40]} ({exc})")
+            capture(exc, platform=c["platform"], title=c["title"][:60])
             continue
         if game is None:
             misses.append(c)

@@ -66,6 +66,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: python scripts/collect.py --platform ${{ matrix.platform }}
 
   # 수집이 모두 끝난 뒤 가격 알림을 보낸다.
@@ -96,6 +97,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           SITE_URL: https://pakpick-web.vercel.app
@@ -137,6 +139,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: python scripts/collect_gear.py
 
       - name: 키 없음 안내
@@ -170,5 +173,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           RAW_RETENTION_DAYS: "45"
         run: python scripts/cleanup.py

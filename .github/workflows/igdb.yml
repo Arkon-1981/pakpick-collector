@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install requests
+      - run: pip install requests sentry-sdk
       - name: IGDB 보강
         if: env.TWITCH_CLIENT_ID != ''
         # 자유입력(limit)을 run: 에 직접 전개하면 셸 명령 주입이 된다.
@@ -55,6 +55,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           LIMIT_IN: ${{ github.event.inputs.limit || '200' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           KO_BACKFILL: ${{ github.event.inputs.ko_backfill || 'false' }}

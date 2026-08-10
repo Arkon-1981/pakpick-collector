@@ -13,7 +13,7 @@
 """
 from dataclasses import dataclass, field
 
-from common import config
+from common import config, monitoring
 from common.hashing import sha256_bytes
 from common.http_client import FetchResult
 from common.logging_util import get_logger
@@ -186,6 +186,8 @@ class BaseCollector:
         except Exception as exc:
             self.errors_count += 1
             logger.exception("상품 저장 실패: %s", item.store_product_id)
+            monitoring.capture(exc, platform=self.platform,
+                               store_product_id=item.store_product_id)
             repository.record_error(
                 self.run_id, self.platform,
                 source_url=item.store_url, error_type="db_save",

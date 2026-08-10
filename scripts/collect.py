@@ -18,6 +18,7 @@ from collectors.playstation import PlaystationCollector    # noqa: E402
 from collectors.steam import SteamCollector                # noqa: E402
 from collectors.xbox import XboxCollector                  # noqa: E402
 from common.logging_util import get_logger                 # noqa: E402
+from common.monitoring import capture, init_sentry         # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,7 @@ def main() -> int:
         help="수집할 플랫폼",
     )
     args = parser.parse_args()
+    init_sentry("collect")
 
     targets = list(COLLECTORS.keys()) if args.platform == "all" else [args.platform]
 
@@ -45,8 +47,9 @@ def main() -> int:
     for name in targets:
         try:
             COLLECTORS[name]().run()
-        except Exception:
+        except Exception as exc:
             logger.exception("[%s] 수집 실패 — 다음 플랫폼 계속 진행", name)
+            capture(exc, platform=name)   # 조용히 넘어가도 Sentry 엔 남긴다
             failed.append(name)
 
     if failed:

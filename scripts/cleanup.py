@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common import config  # noqa: E402
 from common.logging_util import get_logger  # noqa: E402
+from common.monitoring import init_sentry  # noqa: E402
 from db.client import get_client  # noqa: E402
 from storage import raw_storage  # noqa: E402
 
@@ -35,6 +36,7 @@ DELETE_CHUNK = 100
 
 
 def main() -> int:
+    init_sentry("cleanup")
     cutoff = (datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)).isoformat()
     logger.info(
         "[cleanup] %d일 이전(%s) 원본 정리 시작%s",
