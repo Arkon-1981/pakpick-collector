@@ -163,6 +163,13 @@ class SteamCollector(BaseCollector):
         for section, kind in (("new_releases", "new"), ("coming_soon", "upcoming")):
             items = (data.get(section) or {}).get("items") or []
             parsed = parse_featured_items(items, kind)
+            # 200 인데 섹션이 비면 '이 종류가 없어진 것'이 아니라 응답/마크업 문제다.
+            # 조용히 넘기면 앞서 할인 목록이 지운 content_kind 를 아무도 되살리지
+            # 못해 신작·출시예정 탭이 빈다 → 오류로 남겨 보이게 한다.
+            if not parsed:
+                logger.warning("[steam] featured %s(%s) 0건 — 실패로 기록", section, kind)
+                self.record_parse_error(FEATURED_URL, f"featured {section} 0건 (응답/마크업 변경 의심)")
+                continue
             self._enrich(parsed)
             for item in parsed:
                 self.save_item(item, raw_doc_id)
@@ -190,6 +197,12 @@ class SteamCollector(BaseCollector):
                 continue
 
             items = parse_search_results_html(data.get("results_html") or "")
+            if not items:
+                # 무료 배포는 할인 목록과 겹쳐(100% 할인) 앞선 저장이 이미 free 표시를
+                # 지웠다. 여기서 0건을 조용히 넘기면 무료 탭이 빈다.
+                logger.warning("[steam] %s 0건 — 실패로 기록", label)
+                self.record_parse_error(url, f"{label} 0건 (마크업/차단 의심)")
+                continue
             self._enrich(items)
             for item in items:
                 item.extracted_data["content_kind"] = "free"
@@ -221,6 +234,12 @@ class SteamCollector(BaseCollector):
             return
 
         items = parse_search_results_html(data.get("results_html") or "")
+        if not items:
+            # 인기 순위는 매 실행 다시 쓰는 값이라, 0건을 정상으로 보면 앞선 할인
+            # 저장이 지운 popular_rank 를 아무도 복구하지 못해 인기 탭이 빈다.
+            logger.warning("[steam] 인기 0건 — 실패로 기록")
+            self.record_parse_error(POPULAR_URL, "인기 0건 (마크업/차단 의심)")
+            return
         self._enrich(items)
         keep = repository.fetch_item_meta(
             self.platform, config.STORE_REGION, ["content_kind", "is_f2p"]

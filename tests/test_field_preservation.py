@@ -153,6 +153,24 @@ def test_xbox_empty_page_is_failure() -> None:
     check("xbox: 정상 페이지는 failed 아님", "new" not in failed)
 
 
+def test_collectors_have_repository_import() -> None:
+    """보존 코드가 repository 를 실제로 부를 수 있는지 (임포트 누락 회귀 방지).
+
+    실측 사고: xbox.py 가 repository.fetch_item_meta 를 부르면서 임포트를 빠뜨려
+    매 실행 NameError → except 가 삼켜 _prev_kinds={} → 보존이 통째로 무동작.
+    단위 테스트가 _prev_kinds 를 손으로 주입했기 때문에 못 잡았다.
+    """
+    import importlib
+    for mod_name in ("collectors.xbox", "collectors.steam",
+                     "collectors.nintendo", "collectors.playstation"):
+        mod = importlib.import_module(mod_name)
+        src = Path(mod.__file__).read_text()
+        uses = "repository." in src
+        has_import = hasattr(mod, "repository")
+        check(f"{mod_name.split('.')[-1]}: repository 사용 시 임포트 존재",
+              (not uses) or has_import)
+
+
 def test_merge_current_data() -> None:
     """current_data 병합 — 경로가 안 챙긴 보강 값을 자동 보존한다."""
     from db.repository import merge_current_data as merge
@@ -200,6 +218,7 @@ if __name__ == "__main__":
     test_steam_enrich_fallback()
     test_ps_keep_meta()
     test_xbox_empty_page_is_failure()
+    test_collectors_have_repository_import()
     test_merge_current_data()
     print()
     if fails:

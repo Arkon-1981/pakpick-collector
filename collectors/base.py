@@ -75,6 +75,8 @@ class BaseCollector:
         # 예: 스팀 상세 API 스키마가 바뀌면 상품 수는 그대로인데 할인 종료일만 0건이 된다.
         self.field_hits: dict[str, int] = {}
         self.field_total: dict[str, int] = {}
+        # 종류·순위 개수(new/upcoming/free/popular_rank) — 목록이 조용히 죽는 것 관측용
+        self.kind_counts: dict[str, int] = {}
         # 상품ID → 내부 id. 실행 시작 때 한 번 받아 두고 '기존 상품 찾기' 조회를 없앤다.
         # 실측(PS 1회): 그 조회만 2,137회였다. None = 아직 안 받음.
         self._id_cache: dict[str, int] | None = None
@@ -227,6 +229,14 @@ class BaseCollector:
         self._note("title", bool(item.title))
         self._note("image_url", bool(item.image_url))
         self._note("final_price", item.final_price is not None)
+        # 종류·순위는 '일부 상품에만' 있는 게 정상이라 채움률 최저선을 걸 수 없다.
+        # 대신 절대 개수를 세어 로그에 남긴다 — 목록 하나가 조용히 죽으면
+        # (인기/신작/무료 0건) 여기서 0 으로 드러나 사람이 알아볼 수 있다.
+        if item.extracted_data.get("content_kind"):
+            self.kind_counts[item.extracted_data["content_kind"]] = (
+                self.kind_counts.get(item.extracted_data["content_kind"], 0) + 1)
+        if item.extracted_data.get("popular_rank") is not None:
+            self.kind_counts["popular_rank"] = self.kind_counts.get("popular_rank", 0) + 1
         # 할인 중인 상품만 분모로 삼는다 (정가 상품에 종료일이 없는 건 정상)
         if item.is_on_sale:
             self._note("sale_end_at", bool(item.sale_end_at))
@@ -385,4 +395,11 @@ class BaseCollector:
         logger.info(
             "[%s] 수집 완료 — 페이지 %d개, 확인 상품 %d개(신규 저장 %d), 오류 %d건",
             self.platform, self.pages_found, confirmed, self.products_found, self.errors_count,
+        )
+        # 목록별 표시 개수 — 어느 목록이 조용히 죽었는지 한 줄로 보인다
+        # (예: free 0 이면 무료 목록 수집이 실패한 것)
+        logger.info(
+            "[%s] 종류/순위 표시 — %s",
+            self.platform,
+            " · ".join(f"{k} {v}" for k, v in sorted(self.kind_counts.items())) or "없음",
         )
