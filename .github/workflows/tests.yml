@@ -1,0 +1,41 @@
+# 테스트 자동 실행 — 지금까지 tests/ 가 있어도 아무도 돌리지 않아
+# '프로덕션에서 돌려보고 깨진 걸 알게 되는' 상태였다. PR·push 마다 돌린다.
+#
+# 스크립트 스타일 테스트(각 파일이 자체 실행 + exit code)라 pytest 없이도 돈다.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      # 문법 오류를 먼저 걸러낸다 (테스트가 import 조차 못 하는 상황 방지)
+      - name: 컴파일 검사
+        run: python -m compileall -q collectors parsers db common scripts storage
+
+      # 각 테스트 파일은 자체적으로 결과를 출력하고 실패 시 exit 1 한다
+      - name: 테스트 실행
+        run: |
+          status=0
+          for f in tests/test_*.py; do
+            echo "=== $f ==="
+            python "$f" || status=1
+          done
+          exit $status
