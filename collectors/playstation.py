@@ -93,6 +93,17 @@ class PlaystationCollector(BaseCollector):
         self._meta_ok = True  # 출시일·퍼블리셔 오퍼레이션 (실패 시 보강 생략)
         self._meta_fetched = 0
         seen_ids: set[str] = set()
+
+        # 할인 경로 저장은 node+가격만 실어 current_data 를 덮으므로, 신작/무료 때
+        # 보강해 둔 출시일·퍼블리셔·장르·DLC판별(content_type)이 지워지고 재보강
+        # 경로가 없다. 시작 시 직전 값을 한 번 받아 저장 직전 되살린다(_keep_meta).
+        try:
+            self._prev_meta = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION, list(META_KEYS)
+            )
+        except Exception:
+            logger.exception("[playstation] 기존 메타 조회 실패 — 보존 없이 진행")
+            self._prev_meta = {}
         # 이미 '저장된' 상품들(종료일 보강 후보). 저장은 페이지 단위로 즉시 하고,
         # 종료일 보강은 목록 크롤이 끝난 뒤 할인율 상위 N개만 상세로 덧입힌다.
         saved: list = []
@@ -130,6 +141,7 @@ class PlaystationCollector(BaseCollector):
             for item in parse_products_from_next_data(next_data):
                 if item.store_product_id not in seen_ids:
                     seen_ids.add(item.store_product_id)
+                    self._keep_meta(item)   # 직전 보강값 보존
                     self.save_item(item, raw_doc_id)  # 즉시 저장(부분 실패해도 데이터 보존)
                     saved.append(item)
         else:
@@ -401,6 +413,7 @@ class PlaystationCollector(BaseCollector):
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             for item in new_items:
                 seen_ids.add(item.store_product_id)
+                self._keep_meta(item)   # 직전 보강값 보존
                 self.save_item(item, raw_doc_id)
                 saved.append(item)
             logger.info("[playstation] GQL %s offset %d: %d개 (신규 %d/전체 %s)",
@@ -446,6 +459,7 @@ class PlaystationCollector(BaseCollector):
             new_items = [i for i in items if i.store_product_id not in seen_ids]
             for item in new_items:
                 seen_ids.add(item.store_product_id)
+                self._keep_meta(item)   # 직전 보강값 보존
                 self.save_item(item, raw_doc_id)  # 즉시 저장
                 saved.append(item)
 
@@ -550,6 +564,16 @@ class PlaystationCollector(BaseCollector):
             logger.exception("[playstation] %s 호출 실패: %s", op, product_id)
             return None
         return None if data.get("errors") else data
+
+    def _keep_meta(self, item) -> None:
+        """할인 경로 저장 직전, 직전에 보강된 메타(출시일·퍼블리셔·장르·DLC판별)를
+        되살린다. 목록에서 온 값이 있으면 건드리지 않고 빈 자리만 채운다."""
+        keep = getattr(self, "_prev_meta", {}).get(item.store_product_id)
+        if not keep:
+            return
+        for k in META_KEYS:
+            if keep.get(k) is not None and not item.extracted_data.get(k):
+                item.extracted_data[k] = keep[k]
 
     def _enrich_release_meta(self, items: list, cached: dict) -> int:
         """신작·출시예정 상품에 출시일·퍼블리셔·장르를 채운다.

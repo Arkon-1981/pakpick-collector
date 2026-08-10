@@ -271,18 +271,24 @@ class NintendoCollector(BaseCollector):
             # 옛 판정이 남아서 못 고치므로, 그냥 매번 확인한다 (자가 치유).
             # 무료 목록 재저장도 보강된 갤러리를 지우지 않게 보존한다
             try:
-                prev_galleries = repository.fetch_item_meta(
-                    self.platform, config.STORE_REGION, ["gallery"]
+                prev_meta = repository.fetch_item_meta(
+                    self.platform, config.STORE_REGION,
+                    ["gallery", "release_date", "platform_generation"]
                 )
             except Exception:
-                prev_galleries = {}
+                prev_meta = {}
 
             nso = 0
             for item in items:
                 item.extracted_data["content_kind"] = "free"
-                prev_g = (prev_galleries.get(item.store_product_id) or {}).get("gallery")
+                keep = prev_meta.get(item.store_product_id) or {}
+                prev_g = keep.get("gallery")
                 if isinstance(prev_g, list) and len(prev_g) > 1:
                     item.extracted_data["gallery"] = prev_g
+                # 무료 목록엔 없는 출시일·세대는 직전 값을 지우지 않는다
+                for k in ("release_date", "platform_generation"):
+                    if keep.get(k) is not None and not item.extracted_data.get(k):
+                        item.extracted_data[k] = keep[k]
                 if item.store_url:
                     html = self._fetch_detail_server(item.store_url) or ""
                     if _is_nso_only(item.title or "", html):
@@ -441,26 +447,40 @@ class NintendoCollector(BaseCollector):
         # 이전 실행이 채워 둔 갤러리(2장+)를 재저장이 지우지 않게 미리 받아 둔다.
         # 이 보존이 없으면 보강 대상(상위 150개)에서 빠지는 순간 스크린샷이 타일
         # 1장으로 되돌아가, 커버리지가 실행마다 리셋됐다 (실측: 닌텐도만 31%).
+        # 재저장이 다른 경로(일정=신작표시·인기=순위·상세=세대)가 채워 둔 값을
+        # 지우지 않게 미리 받아 둔다. gallery 뿐 아니라 content_kind·release_date·
+        # platform_generation·subscription 도 이 경로가 안 건드리면 보존해야 한다
+        # (같은 실행의 _collect_schedule 이 붙인 '신작' 표시가 여기서 지워지던 문제).
+        KEEP_KEYS = ["gallery", "content_kind", "release_date",
+                     "platform_generation", "subscription"]
         try:
-            prev_galleries = repository.fetch_item_meta(
-                self.platform, config.STORE_REGION, ["gallery"]
+            prev_meta = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION, KEEP_KEYS
             )
         except Exception:
-            logger.exception("[nintendo] 기존 갤러리 조회 실패 — 보존 없이 진행")
-            prev_galleries = {}
+            logger.exception("[nintendo] 기존 메타 조회 실패 — 보존 없이 진행")
+            prev_meta = {}
 
         for item, raw_doc_id in collected:
             pid = item.store_product_id
+            keep = prev_meta.get(pid) or {}
             # 세대: SW2 필터 소속이면 switch2, 아니면 switch1 (필터가 동작한 경우만).
             # ※ 닌텐도 KR 스토어는 크로스젠을 SW1/SW2 '별도 상품'으로 올려 상품별 '대상 본체'엔
             #    항상 한 기종만 표기된다(진단 확인: SW2 상품 81/81 = 'Nintendo Switch 2' 단일).
             #    따라서 상세 파싱 없이 필터 소속만으로 세대를 확정한다.
             if have_filter:
                 item.extracted_data["platform_generation"] = "switch2" if pid in sw2_ids else "switch1"
+            elif keep.get("platform_generation"):
+                # 필터 실패한 실행에서는 직전에 확정해 둔 세대를 지우지 않는다
+                item.extracted_data["platform_generation"] = keep["platform_generation"]
+            # 이 경로가 안 붙이는 값(신작 표시·출시일·구독)은 직전 값을 되살린다
+            for k in ("content_kind", "release_date", "subscription"):
+                if keep.get(k) is not None and not item.extracted_data.get(k):
+                    item.extracted_data[k] = keep[k]
             if pid in gallery_ids:
                 self._enrich_detail(item)  # 갤러리(스크린샷)만 보강
             else:
-                prev = (prev_galleries.get(pid) or {}).get("gallery")
+                prev = keep.get("gallery")
                 if isinstance(prev, list) and len(prev) > 1:
                     item.extracted_data["gallery"] = prev
             self.save_item(item, raw_doc_id)
