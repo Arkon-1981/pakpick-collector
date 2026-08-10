@@ -91,7 +91,24 @@ class XboxCollector(BaseCollector):
         # 엑스박스 목록 API가 할인만 주는 게 아니어서 신작·무료가 거의 다 이미 받은
         # 상품이었다 → 전부 건너뛰어져 content_kind 가 하나도 안 붙었다
         # (실측: new 50/50, free 50/50 이 중복 처리되어 신작·무료 탭이 비었다).
-        kinds, popular_ranks = self._fetch_release_kinds()
+        kinds, popular_ranks, failed_kinds = self._fetch_release_kinds()
+        self._failed_kinds = failed_kinds
+
+        # 종류/순위 페이지가 '실패'하면 그 종류가 kinds 에서 빠지는데, 엑스박스는
+        # 매 실행 전 상품을 재저장하므로 그대로 두면 content_kind·popular_rank 가
+        # 카탈로그 전체에서 지워진다(신작/무료/인기 탭이 비어 보임). 직전 값을 받아
+        # '페이지가 실패한 종류'에 한해 되살린다. (페이지가 정상인데 목록에서 빠진
+        # 상품은 진짜로 빠진 것 → 되살리지 않고 지운다.)
+        try:
+            self._prev_kinds = (
+                repository.fetch_item_meta(
+                    self.platform, config.STORE_REGION, ["content_kind", "popular_rank"]
+                )
+                if failed_kinds else {}
+            )
+        except Exception:
+            logger.exception("[xbox] 기존 종류/순위 조회 실패 — 보존 없이 진행")
+            self._prev_kinds = {}
 
         # 목록에 없던 신작·무료만 뒤에 붙여, 상품 하나당 상세 조회는 한 번만 한다
         known = set(product_ids)
@@ -106,24 +123,31 @@ class XboxCollector(BaseCollector):
                 kinds=kinds, popular_ranks=popular_ranks,
             )
 
-    def _fetch_release_kinds(self) -> tuple[dict[str, str], dict[str, int]]:
+    def _fetch_release_kinds(self) -> tuple[dict[str, str], dict[str, int], set[str]]:
         """microsoft.com 스토어의 신작·출시예정·무료·인기 목록에서
-        ({상품ID: 종류}, {상품ID: 인기 순위}) 를 만든다.
+        ({상품ID: 종류}, {상품ID: 인기 순위}, {실패한 종류}) 를 만든다.
 
         상세는 받지 않는다 — 여기서는 '무엇이 신작인가'만 알아내고, 실제 상세 조회는
         할인 목록과 합쳐 한 번에 처리한다(같은 상품을 두 번 받지 않기 위해).
         먼저 나온 종류를 유지한다(출시예정 → 신작 → 무료 순).
+
+        실패한 종류를 함께 돌려주는 이유: 그 종류 페이지가 죽은 실행에서는 해당
+        표시를 '삭제'가 아니라 '직전 값 유지'로 처리해야 한다. 반대로 페이지가
+        정상인데 목록에서 빠진 상품은 진짜로 빠진 것이라 표시를 지운다.
         """
         kinds: dict[str, str] = {}
         ranks: dict[str, int] = {}
+        failed: set[str] = set()
         for kind, url in RELEASE_PAGES:
             try:
                 result = fetch(url)
             except Exception as exc:
                 logger.warning("[xbox] %s 페이지 접속 실패: %s", kind, exc)
+                failed.add(kind)
                 continue
             if result.status_code != 200:
                 self.record_parse_error(url, f"{kind} 페이지 상태코드 {result.status_code}")
+                failed.add(kind)
                 continue
 
             self.save_raw(
@@ -143,7 +167,7 @@ class XboxCollector(BaseCollector):
                     kinds[pid] = kind
                     added += 1
             logger.info("[xbox] %s 상품 ID %d개 (신규 %d)", kind, len(found), added)
-        return kinds, ranks
+        return kinds, ranks, failed
 
     # =================================================================
     # 1단계: 할인 상품 ID 목록 — 여러 경로를 순서대로 시도
@@ -298,11 +322,21 @@ class XboxCollector(BaseCollector):
             self.record_parse_error(url, "카탈로그 JSON 파싱 실패")
             return
 
+        prev = getattr(self, "_prev_kinds", {})
+        failed = getattr(self, "_failed_kinds", set())
         for item in parse_catalog_products(data):
+            keep = prev.get(item.store_product_id) or {}
             kind = (kinds or {}).get(item.store_product_id)
             if kind:
                 item.extracted_data["content_kind"] = kind
+            # 종류가 안 잡혔을 때: 직전 종류의 '페이지가 이번에 실패'했을 때만 유지.
+            # 페이지가 멀쩡했는데 빠졌으면 그 종류에서 진짜 이탈한 것 → 지운다.
+            elif keep.get("content_kind") in failed:
+                item.extracted_data["content_kind"] = keep["content_kind"]
             rank = (popular_ranks or {}).get(item.store_product_id)
             if rank is not None:
                 item.extracted_data["popular_rank"] = rank
+            # 인기 페이지가 실패한 실행에서만 직전 순위 유지 (정상 이탈은 지운다)
+            elif "popular" in failed and keep.get("popular_rank") is not None:
+                item.extracted_data["popular_rank"] = keep["popular_rank"]
             self.save_item(item, raw_doc_id)

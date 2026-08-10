@@ -239,16 +239,26 @@ class SteamCollector(BaseCollector):
     # 배치 보강
     # ------------------------------------------------------------------
 
+    # 보강으로만 채워지는 필드 — 배치가 실패하면 목록 수준 데이터로 덮여
+    # 사라진다. 실패 상품은 DB 의 직전 값을 되살려 유실을 막는다.
+    # (gallery 는 목록 파서가 [header] 1장을 채우므로 아래서 따로 처리)
+    _ENRICH_KEYS = (
+        "content_type", "release_date", "publishers",
+        "developers", "short_description", "review", "korean", "is_f2p",
+    )
+
     def _enrich(self, items: list[ParsedItem]) -> None:
         """GetItems로 items를 제자리 보강한다 (50개씩 묶어 요청).
 
         보강이 실패해도 목록에서 얻은 이름·가격은 그대로 저장된다 → 수집 자체는 계속.
+        단, 배치가 실패한(=보강 못 한) 상품은 저장 시 current_data 가 통째로
+        덮여 기존 갤러리·DLC표시·출시일이 지워지므로, DB 의 직전 값을 되살린다.
         """
         if not items:
             return
         by_id = {i.store_product_id: i for i in items if i.store_product_id.isdigit()}
         appids = list(by_id)
-        filled = 0
+        enriched: set[str] = set()
 
         for offset in range(0, len(appids), GETITEMS_BATCH):
             chunk = appids[offset : offset + GETITEMS_BATCH]
@@ -256,11 +266,36 @@ class SteamCollector(BaseCollector):
             for appid, info in info_map.items():
                 item = by_id.get(appid)
                 if item is not None and self._apply_info(item, info):
-                    filled += 1
+                    enriched.add(appid)
 
-        if filled:
+        # 보강 실패분 복구 — 직전 저장된 보강 필드를 다시 실어 준다
+        missed = [a for a in appids if a not in enriched]
+        if missed:
+            prev = repository.fetch_item_meta(
+                self.platform, config.STORE_REGION,
+                list(self._ENRICH_KEYS) + ["gallery"]
+            )
+            restored = 0
+            for appid in missed:
+                item, keep = by_id[appid], prev.get(appid)
+                if not keep:
+                    continue
+                for k in self._ENRICH_KEYS:
+                    # 이미 값이 있으면(목록에서 온 것) 건드리지 않고, 빈 자리만 되살린다
+                    if keep.get(k) is not None and not item.extracted_data.get(k):
+                        item.extracted_data[k] = keep[k]
+                # 갤러리는 스크린샷까지 있는 직전 값(2장 이상)이 목록의 [header] 1장보다
+                # 나으면 되살린다 (닌텐도 갤러리 보존과 같은 규칙)
+                pg = keep.get("gallery")
+                if isinstance(pg, list) and len(pg) > len(item.extracted_data.get("gallery") or []):
+                    item.extracted_data["gallery"] = pg
+                restored += 1
+            if restored:
+                logger.info("[steam] 보강 실패 %d개 중 %d개 직전 값 복구", len(missed), restored)
+
+        if enriched:
             logger.info("[steam] 상세 보강 %d/%d건 (요청 %d회)",
-                        filled, len(appids),
+                        len(enriched), len(appids),
                         (len(appids) + GETITEMS_BATCH - 1) // GETITEMS_BATCH)
 
     def _fetch_store_items(self, appids: list[str]) -> dict[str, dict]:
