@@ -78,6 +78,7 @@ class BaseCollector:
         # 상품ID → 내부 id. 실행 시작 때 한 번 받아 두고 '기존 상품 찾기' 조회를 없앤다.
         # 실측(PS 1회): 그 조회만 2,137회였다. None = 아직 안 받음.
         self._id_cache: dict[str, int] | None = None
+        self._prev_data: dict[str, dict] | None = None   # 병합용 직전 보강 값
         # 버전 행 last_seen_at 갱신 대상. 상품마다 PATCH 하면 실측 1,674회가 더 붙는다.
         self._version_touches: list[int] = []
 
@@ -138,6 +139,26 @@ class BaseCollector:
             self._id_cache = {}
         return self._id_cache
 
+    def _ensure_prev_data(self) -> dict[str, dict]:
+        """직전 current_data 의 보강 키만 실행당 1회 받아 둔다 (병합 저장용).
+
+        저장이 current_data 를 통째로 교체하므로, 이 값 없이는 경로가 안 챙긴
+        보강 값(갤러리·출시일·DLC판별…)이 지워진다. 경로마다 개별로 부르던
+        fetch_item_meta 를 여기 1회로 합치는 것이라 요청 수는 오히려 줄어든다.
+        실패하면 빈 dict — 병합만 생략되고 수집은 계속된다(기존 동작).
+        """
+        if self._prev_data is None:
+            try:
+                self._prev_data = repository.fetch_item_meta(
+                    self.platform, config.STORE_REGION, repository.MERGE_KEYS
+                )
+                logger.info("[%s] 병합용 직전 메타 %d개 프리페치",
+                            self.platform, len(self._prev_data))
+            except Exception:
+                logger.exception("[%s] 직전 메타 조회 실패 — 병합 없이 진행", self.platform)
+                self._prev_data = {}
+        return self._prev_data
+
     def flush_deferred(self) -> None:
         """모아 둔 버전 last_seen_at 갱신을 한 번에 처리한다."""
         if not self._version_touches:
@@ -156,6 +177,7 @@ class BaseCollector:
             item_id = repository.upsert_store_item(
                 id_cache=self._ensure_id_cache(),
                 touch_queue=self._version_touches,
+                prev_data=self._ensure_prev_data().get(item.store_product_id),
                 platform=self.platform,
                 store_region=config.STORE_REGION,
                 store_product_id=item.store_product_id,

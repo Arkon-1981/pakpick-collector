@@ -123,10 +123,54 @@ def test_ps_keep_meta() -> None:
     check("PS: 신규 상품은 예외 없이 통과", item3.extracted_data == {})
 
 
+# ---------------------------------------------------------------- 병합 저장(A안)
+def test_merge_current_data() -> None:
+    """current_data 병합 — 경로가 안 챙긴 보강 값을 자동 보존한다."""
+    from db.repository import merge_current_data as merge
+
+    # 신규 상품(직전 값 없음)은 그대로
+    check("merge: 직전 값 없으면 새 값 그대로", merge(None, {"a": 1}) == {"a": 1})
+
+    # 보강 값: new 가 비었으면 old 유지, 있으면 new 우선
+    old = {"release_date": "2023-01-01", "publisher": "Sony", "genres": ["액션"],
+           "content_type": "game"}
+    out = merge(old, {"price_raw": {"f": 100}})       # 할인 경로: 가격만
+    check("merge: 출시일 보존", out["release_date"] == "2023-01-01")
+    check("merge: 퍼블리셔 보존", out["publisher"] == "Sony")
+    check("merge: 장르 보존", out["genres"] == ["액션"])
+    check("merge: DLC 판별 보존", out["content_type"] == "game")
+    check("merge: 새 값(가격)은 그대로", out["price_raw"] == {"f": 100})
+
+    out2 = merge(old, {"release_date": "2024-12-31"})
+    check("merge: 새 값이 있으면 최신 우선", out2["release_date"] == "2024-12-31")
+
+    # 갤러리: 목록 파서가 대표 1장만 넣어도 스샷 6장이 살아남아야 한다
+    out3 = merge({"gallery": ["a", "b", "c", "d", "e", "f"]}, {"gallery": ["a"]})
+    check("merge: 갤러리는 더 긴 쪽 유지", len(out3["gallery"]) == 6)
+    out4 = merge({"gallery": ["a"]}, {"gallery": ["a", "b", "c"]})
+    check("merge: 새 갤러리가 더 길면 새 것", len(out4["gallery"]) == 3)
+
+    # 상태성 필드는 병합 대상이 아니다 — 목록에서 이탈하면 지워져야 한다
+    out5 = merge({"content_kind": "new", "popular_rank": 3, "subscription": "gamepass"},
+                 {"price_raw": {}})
+    check("merge: content_kind 는 유지하지 않는다(정상 이탈 반영)",
+          "content_kind" not in out5)
+    check("merge: popular_rank 는 유지하지 않는다", "popular_rank" not in out5)
+    check("merge: subscription 은 유지하지 않는다(게임패스 이탈 반영)",
+          "subscription" not in out5)
+
+    # 원본을 변형하지 않는다 (호출자가 재사용해도 안전)
+    src_old, src_new = {"publisher": "P"}, {"x": 1}
+    merge(src_old, src_new)
+    check("merge: 입력 dict 를 변형하지 않는다",
+          src_old == {"publisher": "P"} and src_new == {"x": 1})
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_steam_enrich_fallback()
     test_ps_keep_meta()
+    test_merge_current_data()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))

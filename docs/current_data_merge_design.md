@@ -46,15 +46,21 @@ gallery            → len(old) > len(new) 면 old 유지 (스샷 보존)
 genres, players, platforms, publishers, developers, franchises → fill-if-empty
 ```
 
-### ③ 상태-스티키 (preserve-if-key-absent): 키가 new 에 아예 없으면 old 유지
-그 값의 '주인 경로'만 명시적으로 설정/삭제한다. 다른 경로는 건드리지 않는다.
+### ③ 상태성 필드 — 병합하지 않는다 (구현 중 검증으로 방향 수정)
 ```
-content_kind, popular_rank, subscription
+content_kind, popular_rank, subscription  ← 병합 대상에서 제외
 ```
-- **삭제는 명시적으로**: 인기 목록에서 빠진 상품의 popular_rank 는 별도 sweep 이
-  `popular_rank=None` 을 **명시적으로 실어** 저장한다(키가 new 에 존재 → new(None) 우선 →
-  삭제). 즉 "부재=유지, 명시적 None=삭제". xbox 의 '페이지 실패 vs 정상 이탈' 구분 로직은
-  이 sweep 쪽에 남는다.
+처음엔 이들도 '스티키(키가 없으면 old 유지)'로 두려 했으나, **실제 파서와 대조하니
+위험**했다:
+- `parsers/xbox.py` 는 게임패스일 때만 `subscription` 키를 싣는다(`else {}`).
+  스티키면 게임패스에서 **빠진 게임이 영원히 게임패스로** 표시된다.
+- `content_kind` / `popular_rank` 도 같다. 정상적으로 목록에서 이탈한 상품의 표시가
+  영구 유지되어 인기 탭에 낡은 항목이 쌓이고, xbox 의 '페이지 실패 vs 정상 이탈'
+  구분(작동 검증됨)이 무력화된다.
+
+**결론**: 상태성 필드는 "지금 어느 목록에 속하는가"라서 매 실행 재계산되는 게 옳다.
+경로별 로직(xbox 실패종류 유지·정상이탈 삭제 등)이 이미 이를 정확히 처리하므로
+병합은 손대지 않는다. 병합의 대상은 **한 번 얻으면 계속 유효한 보강 값**뿐이다.
 
 ### 그 외 (항상-신선)
 `price_raw` 등 파서가 매번 내보내는 값은 자연히 new 로 덮인다(정책 불필요).
@@ -63,27 +69,22 @@ content_kind, popular_rank, subscription
 
 ```python
 # repository.py
-_MERGE_SCALAR = {release_date, publisher, developer, content_type, content_rating,
-                 short_description, top_category, store_classification,
-                 platform_generation, review, korean, is_f2p, gold_required}
-_MERGE_FILL_ARRAY = {genres, players, platforms, publishers, developers, franchises}
-_MERGE_STICKY = {content_kind, popular_rank, subscription}
+_MERGE_FILL = (  # 보강 값: new 가 비었으면 old 유지 (스칼라·배열 공통)
+    "release_date", "publisher", "developer", "content_type", "content_rating",
+    "short_description", "top_category", "store_classification",
+    "platform_generation", "review", "korean", "is_f2p", "gold_required",
+    "genres", "players", "platforms", "publishers", "developers", "franchises",
+)
 
 def merge_current_data(old: dict | None, new: dict) -> dict:
     if not old:
         return new
     out = dict(new)                                  # 기준 = 새 값(price_raw 등 포함)
-    for k in _MERGE_SCALAR:
+    for k in _MERGE_FILL:
         if not out.get(k) and old.get(k) is not None:
-            out[k] = old[k]
-    for k in _MERGE_FILL_ARRAY:
-        if not out.get(k) and old.get(k):
             out[k] = old[k]
     if len(old.get("gallery") or []) > len(out.get("gallery") or []):
         out["gallery"] = old["gallery"]              # 스샷 보존(더 긴 쪽)
-    for k in _MERGE_STICKY:
-        if k not in new and old.get(k) is not None:  # 부재=유지 / 명시적=반영
-            out[k] = old[k]
     return out
 ```
 
