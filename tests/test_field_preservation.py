@@ -124,6 +124,35 @@ def test_ps_keep_meta() -> None:
 
 
 # ---------------------------------------------------------------- 병합 저장(A안)
+def test_xbox_empty_page_is_failure() -> None:
+    """종류 페이지가 200 이지만 상품 0건이면 '실패'로 봐야 한다.
+
+    정상 이탈로 오판하면 그 종류 표시가 카탈로그 전체에서 지워진다
+    (실측: free 페이지 200/0건 → 무료 표시 50개 전멸).
+    """
+    import collectors.xbox as x
+
+    col = x.XboxCollector.__new__(x.XboxCollector)
+    col.pages_found = 0
+    col.save_raw = lambda *a, **k: 1
+    errors: list[str] = []
+    col.record_parse_error = lambda url, msg, details=None: errors.append(msg)
+
+    # 첫 페이지는 빈 응답(200), 나머지는 상품 1개
+    # 실제 스토어 마크업 형식: "productId":"<12자>"  (형식이 다르면 0건이 되어
+    # 테스트가 '전부 실패'로 통과해 버리므로 실제 정규식과 맞춘다)
+    def fake_fetch(url, **kw):
+        empty = "coming-soon" in url          # upcoming 만 빈 페이지
+        text = "" if empty else '"productId":"9nabcdefghij"'
+        return MagicMock(status_code=200, text=text)
+
+    with patch.object(x, "fetch", side_effect=fake_fetch):
+        kinds, ranks, failed = col._fetch_release_kinds()
+    check("xbox: 200/0건 페이지는 failed 로 표시", "upcoming" in failed)
+    check("xbox: 0건 페이지는 오류로 기록", any("0건" in m for m in errors))
+    check("xbox: 정상 페이지는 failed 아님", "new" not in failed)
+
+
 def test_merge_current_data() -> None:
     """current_data 병합 — 경로가 안 챙긴 보강 값을 자동 보존한다."""
     from db.repository import merge_current_data as merge
@@ -170,6 +199,7 @@ if __name__ == "__main__":
     test_xbox_kind_rank()
     test_steam_enrich_fallback()
     test_ps_keep_meta()
+    test_xbox_empty_page_is_failure()
     test_merge_current_data()
     print()
     if fails:

@@ -158,6 +158,14 @@ class XboxCollector(BaseCollector):
 
             # displaycatalog는 대문자 BigId를 쓰는데 스토어 페이지는 소문자로 준다
             found = [i.upper() for i in dict.fromkeys(PRODUCT_ID_ANY_CASE_RE.findall(result.text))]
+            # HTTP 200 이지만 상품이 0건 = 사실상 실패다(봇 차단·마크업 변경 시 빈 목록을
+            # 200 으로 준다). 이걸 '정상 이탈'로 보면 그 종류 표시가 카탈로그 전체에서
+            # 지워진다 — 실측: free 페이지가 이렇게 200/0건을 줘 무료 표시 50개가 전멸했다.
+            if not found:
+                logger.warning("[xbox] %s 페이지 200 이지만 상품 0건 — 실패로 처리(직전 값 유지)", kind)
+                self.record_parse_error(url, f"{kind} 페이지 상품 0건 (마크업 변경/차단 의심)")
+                failed.add(kind)
+                continue
             added = 0
             for idx, pid in enumerate(found):
                 if kind == "popular":
