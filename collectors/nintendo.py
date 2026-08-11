@@ -336,6 +336,12 @@ class NintendoCollector(BaseCollector):
             self.pages_found += 1
 
             items = parse_list_page(result.text)
+            # '0건'과 '중복(마지막 페이지)'은 다르다 — 0건은 200 으로 빈 목록을 준
+            # 실패이고, 그대로 넘기면 순위를 아무에게도 못 붙여 인기 탭이 빈다.
+            if not items:
+                logger.warning("[nintendo] 인기 %d페이지 0건 — 실패로 처리", page_no)
+                self.record_parse_error(url, f"인기 {page_no}페이지 0건 (차단/마크업 의심)")
+                break
             new_items = [i for i in items if i.store_product_id not in seen]
             if not new_items:
                 break  # 마지막 페이지를 넘어가면 같은 상품이 반복된다
@@ -451,8 +457,11 @@ class NintendoCollector(BaseCollector):
         # 지우지 않게 미리 받아 둔다. gallery 뿐 아니라 content_kind·release_date·
         # platform_generation·subscription 도 이 경로가 안 건드리면 보존해야 한다
         # (같은 실행의 _collect_schedule 이 붙인 '신작' 표시가 여기서 지워지던 문제).
+        # popular_rank 도 포함해야 한다 — 할인 목록 재저장이 매 실행 순위를 지우고
+        # _collect_popular 가 다시 쓰는 구조라, 인기 페이지가 실패한 실행에서는
+        # 순위가 전멸했다(병합은 상태성 필드를 일부러 제외하므로 여기서 챙긴다).
         KEEP_KEYS = ["gallery", "content_kind", "release_date",
-                     "platform_generation", "subscription"]
+                     "platform_generation", "subscription", "popular_rank"]
         try:
             prev_meta = repository.fetch_item_meta(
                 self.platform, config.STORE_REGION, KEEP_KEYS
@@ -473,8 +482,10 @@ class NintendoCollector(BaseCollector):
             elif keep.get("platform_generation"):
                 # 필터 실패한 실행에서는 직전에 확정해 둔 세대를 지우지 않는다
                 item.extracted_data["platform_generation"] = keep["platform_generation"]
-            # 이 경로가 안 붙이는 값(신작 표시·출시일·구독)은 직전 값을 되살린다
-            for k in ("content_kind", "release_date", "subscription"):
+            # 이 경로가 안 붙이는 값(신작 표시·출시일·구독·인기 순위)은 직전 값을 되살린다.
+            # popular_rank 는 뒤이어 _collect_popular 가 다시 쓴다 — 그 수집이 실패한
+            # 실행에서도 순위가 남아 인기 탭이 비지 않게 한다.
+            for k in ("content_kind", "release_date", "subscription", "popular_rank"):
                 if keep.get(k) is not None and not item.extracted_data.get(k):
                     item.extracted_data[k] = keep[k]
             if pid in gallery_ids:
@@ -554,7 +565,18 @@ class NintendoCollector(BaseCollector):
                     if res is None or res.status_code != 200:
                         break
                     page_ids = {i.store_product_id for i in parse_list_page(res.text)}
-                    if not page_ids or page_ids <= ids:
+                    # 중간 페이지가 0건인 것은 '끝'이 아니라 '실패'다(200 으로 빈 목록을
+                    # 주는 차단·렌더 실패). 그대로 끝으로 보면 부분 집합이 반환되고,
+                    # 호출부가 그 결과로 세대를 확정해 뒤쪽 SW2 게임이 switch1 로
+                    # 잘못 기록된다(병합은 빈 값만 채우므로 오염이 자가 치유되지 않는다).
+                    if not page_ids:
+                        logger.warning("[nintendo] 필터 %s %d페이지 0건 — 결과 폐기(직전 세대 유지)", opt, page)
+                        self.record_parse_error(
+                            template.format(opt=opt, page=page),
+                            f"필터 {opt} {page}페이지 0건 (차단/렌더 실패 의심)",
+                        )
+                        return set()
+                    if page_ids <= ids:
                         break  # 새 상품이 없으면 마지막 페이지
                     ids |= page_ids
                 logger.info("[nintendo] 필터 %s 상품 %d개 식별", opt, len(ids))
@@ -658,6 +680,12 @@ class NintendoCollector(BaseCollector):
                         logger.warning(
                             "[nintendo] 재시도 후에도 상품 타일이 안 보임: %s", url
                         )
+                        # 타일이 없는 페이지를 200 으로 돌려주면 호출부가 '정상인데 상품
+                        # 0건'으로 오판해 표시·순위를 지운다. 비200 으로 알려 실패
+                        # 처리를 타게 한다(직전 값 유지).
+                        html = page.content()
+                        return FetchResult(url, 599, html.encode("utf-8"),
+                                           {"x-fetched-via": "playwright", "x-tiles": "missing"})
 
             html = page.content()
             return FetchResult(url, 200, html.encode("utf-8"), {"x-fetched-via": "playwright"})

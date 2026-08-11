@@ -23,6 +23,7 @@ import re
 from collectors.base import BaseCollector
 from common import config
 from common.http_client import fetch
+from db import repository
 from common.logging_util import get_logger
 from parsers.xbox import parse_catalog_products
 

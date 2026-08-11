@@ -101,6 +101,15 @@ def collect(keywords: list[tuple[str, str | None]]) -> list[GearRow]:
             failed.append(kw)
             continue
 
+        # 쿠팡은 200 + rCode=0 인데 productData 가 없으면 예외 없이 []를 준다.
+        # 이걸 성공으로 세면 '모든 검색 실패' 가드가 무력화되고, 전 키워드가 이렇게
+        # 비면 last_seen_at 이 갱신되지 않아 주변기기 목록이 만료 창 뒤 통째로
+        # 사라진다(실행은 성공으로 끝난다). 0건도 실패로 집계한다.
+        if not products:
+            logger.warning("[gear] '%s' 200 이지만 0건 — 실패로 집계", kw)
+            failed.append(kw)
+            continue
+
         kept = 0
         for p in products:
             row = to_row(p, via=kw, hint=hint)

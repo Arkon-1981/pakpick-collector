@@ -150,6 +150,9 @@ class PlaystationCollector(BaseCollector):
         # 2. 카테고리(프로모션) 링크 수집
         category_ids = list(dict.fromkeys(CATEGORY_URL_RE.findall(result.text)))
         logger.info("[playstation] 프로모션 카테고리 %d개 발견", len(category_ids))
+        if not category_ids:
+            # 링크가 0개면 할인 수집 전체가 조용히 건너뛰어진다(허브 마크업 변경·차단)
+            self.record_parse_error(DEALS_URL, "프로모션 카테고리 링크 0개 (차단/마크업 의심)")
 
         # 3. 각 카테고리를 페이지 단위로 순회 (페이지마다 즉시 저장)
         #    시간예산이 짧으면 앞쪽 카테고리만 반복해서 훑고 뒤쪽은 영영 못 보게 된다
@@ -328,12 +331,19 @@ class PlaystationCollector(BaseCollector):
 
                     next_data = extract_next_data(result.text)
                     if not next_data:
+                        self.record_parse_error(url, f"{kind} __NEXT_DATA__ 없음 (차단/마크업 의심)")
                         break
                     items = parse_products_from_next_data(next_data)
                     if not items:
                         # '신규 발매'처럼 Product가 껍데기인 카테고리는 Concept에 실제 데이터가 있다
                         items = parse_concepts_from_next_data(next_data)
                     if not items:
+                        # 1페이지가 0건이면 그 종류를 이번 실행에 전혀 못 붙인다 →
+                        # 뒤따르는 할인 저장이 content_kind 를 지운 채로 끝난다(신작·무료
+                        # 탭이 빈다). 정상 종료와 구분해 오류로 남긴다.
+                        if page == 1:
+                            logger.warning("[playstation] %s 1페이지 0건 — 실패로 기록", kind)
+                            self.record_parse_error(url, f"{kind} 1페이지 0건 (마크업/차단 의심)")
                         break
                     new_items = [i for i in items if i.store_product_id not in seen_ids]
                     meta_fetched += self._enrich_release_meta(new_items, cached_meta)
@@ -400,7 +410,11 @@ class PlaystationCollector(BaseCollector):
                 return got_any
 
             if not items:
-                return got_any
+                # 빈 응답을 'GraphQL 사용 불가'로 승격하면 실행 전체가 24개/요청 HTML로
+                # 내려가 커버리지가 급감한다(요청 4배). 이 카테고리만 접는다.
+                if offset == 0:
+                    self.record_parse_error(GQL_URL, f"카테고리 {category_id[:8]} GQL 0건 (일시 응답 의심)")
+                return got_any or offset > 0
             got_any = True
 
             raw_doc_id = self.save_raw(
@@ -454,6 +468,9 @@ class PlaystationCollector(BaseCollector):
 
             items = parse_products_from_next_data(next_data)
             if not items:
+                # 1페이지 0건이면 이 프로모션 전체가 이번 실행에서 누락된다 → 보이게 기록
+                if page == 1:
+                    self.record_parse_error(url, "카테고리 1페이지 상품 0건 (마크업/차단 의심)")
                 break  # 상품이 아예 없으면 카테고리 끝
 
             new_items = [i for i in items if i.store_product_id not in seen_ids]
