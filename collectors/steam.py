@@ -287,30 +287,12 @@ class SteamCollector(BaseCollector):
                 if item is not None and self._apply_info(item, info):
                     enriched.add(appid)
 
-        # 보강 실패분 복구 — 직전 저장된 보강 필드를 다시 실어 준다
+        # 보강 실패분(missed)은 저장 계층의 current_data 병합이 직전 값을 되살린다
+        # (_ENRICH_KEYS 가 전부 MERGE_FILL_KEYS 에 포함, 갤러리는 '더 긴 쪽' 규칙).
+        # 예전엔 여기서 fetch_item_meta 를 또 불렀지만 이제 불필요하다.
         missed = [a for a in appids if a not in enriched]
         if missed:
-            prev = repository.fetch_item_meta(
-                self.platform, config.STORE_REGION,
-                list(self._ENRICH_KEYS) + ["gallery"]
-            )
-            restored = 0
-            for appid in missed:
-                item, keep = by_id[appid], prev.get(appid)
-                if not keep:
-                    continue
-                for k in self._ENRICH_KEYS:
-                    # 이미 값이 있으면(목록에서 온 것) 건드리지 않고, 빈 자리만 되살린다
-                    if keep.get(k) is not None and not item.extracted_data.get(k):
-                        item.extracted_data[k] = keep[k]
-                # 갤러리는 스크린샷까지 있는 직전 값(2장 이상)이 목록의 [header] 1장보다
-                # 나으면 되살린다 (닌텐도 갤러리 보존과 같은 규칙)
-                pg = keep.get("gallery")
-                if isinstance(pg, list) and len(pg) > len(item.extracted_data.get("gallery") or []):
-                    item.extracted_data["gallery"] = pg
-                restored += 1
-            if restored:
-                logger.info("[steam] 보강 실패 %d개 중 %d개 직전 값 복구", len(missed), restored)
+            logger.info("[steam] 상세 보강 실패 %d개 — 저장 시 직전 값으로 병합됨", len(missed))
 
         if enriched:
             logger.info("[steam] 상세 보강 %d/%d건 (요청 %d회)",

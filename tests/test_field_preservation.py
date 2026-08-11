@@ -62,68 +62,28 @@ def test_xbox_kind_rank() -> None:
 
 
 # ---------------------------------------------------------------- steam
-def test_steam_enrich_fallback() -> None:
-    """GetItems 배치가 실패하면 직전 보강값(갤러리·DLC판별 등)을 되살린다."""
-    import collectors.steam as s
+def test_merge_covers_per_path_keys() -> None:
+    """경로별 복구 코드를 지워도 안전한 이유를 고정한다.
 
-    col = s.SteamCollector.__new__(s.SteamCollector)
-    col.platform = "steam"
-    # 목록에서 온 상태: 갤러리는 header 1장뿐, DLC 판별 없음
-    item = FakeItem("100", {"gallery": ["header.jpg"]})
-    col._fetch_store_items = lambda ids: {}      # 배치 전면 실패 상황
-    prev = {"100": {"content_type": "addon", "gallery": ["a.jpg", "b.jpg", "c.jpg"],
-                    "release_date": "2024-01-01", "publishers": ["P"]}}
-    with patch.object(s.repository, "fetch_item_meta", return_value=prev):
-        col._enrich([item])
-    d = item.extracted_data
-    check("steam: 보강 실패 시 DLC 판별 복구", d.get("content_type") == "addon")
-    check("steam: 보강 실패 시 갤러리(더 긴 쪽) 복구", len(d.get("gallery") or []) == 3)
-    check("steam: 보강 실패 시 출시일 복구", d.get("release_date") == "2024-01-01")
+    steam(_ENRICH_KEYS)·PS(META_KEYS)가 보강하는 값은 저장 계층의 병합
+    (MERGE_FILL_KEYS)이 전부 되살린다. 그래서 중복된 경로별 fetch_item_meta
+    복구를 제거했다 — 이 불변식이 깨지면(새 보강 키 추가 등) 그 값이 조용히
+    사라지므로 여기서 막는다. 갤러리는 '더 긴 쪽' 규칙이 따로 처리한다.
+    """
+    from db.repository import MERGE_FILL_KEYS
+    from collectors.steam import SteamCollector
+    from collectors.playstation import META_KEYS
 
-    # 보강이 성공한 상품은 직전 값으로 되돌리지 않는다
-    item2 = FakeItem("200", {"gallery": ["h.jpg"]})
-    col._fetch_store_items = lambda ids: {"200": {"content_type": "game",
-                                                  "screenshots": ["s1.jpg", "s2.jpg"]}}
-    called = {"n": 0}
+    missing_steam = [k for k in SteamCollector._ENRICH_KEYS if k not in MERGE_FILL_KEYS]
+    check(f"steam 보강 키를 병합이 모두 커버 (누락 {missing_steam})", not missing_steam)
+    missing_ps = [k for k in META_KEYS if k not in MERGE_FILL_KEYS]
+    check(f"PS 보강 키를 병합이 모두 커버 (누락 {missing_ps})", not missing_ps)
 
-    def _spy(*a, **k):
-        called["n"] += 1
-        return {}
-    with patch.object(s.repository, "fetch_item_meta", side_effect=_spy):
-        col._enrich([item2])
-    check("steam: 전부 보강 성공하면 복구 조회를 하지 않는다", called["n"] == 0)
-    check("steam: 보강 성공분은 새 값 반영", item2.extracted_data.get("content_type") == "game")
+    # 상태성 필드는 병합이 일부러 제외 → 경로별 로직이 반드시 남아 있어야 한다
+    for k in ("content_kind", "popular_rank", "subscription"):
+        check(f"{k} 는 병합 대상이 아니다(경로별 처리 유지)", k not in MERGE_FILL_KEYS)
 
 
-# ---------------------------------------------------------------- playstation
-def test_ps_keep_meta() -> None:
-    """할인 경로 저장 직전, 신작/무료 때 보강해 둔 메타를 되살린다."""
-    import collectors.playstation as p
-
-    col = p.PlaystationCollector.__new__(p.PlaystationCollector)
-    col._prev_meta = {"CUSA1": {"release_date": "2023-05-05", "publisher": "Sony",
-                                "genres": ["액션"], "content_type": "game"}}
-    item = FakeItem("CUSA1", {"price_raw": {"x": 1}})   # 할인 경로: 가격만 있다
-    col._keep_meta(item)
-    d = item.extracted_data
-    check("PS: 할인 재저장에 출시일 보존", d.get("release_date") == "2023-05-05")
-    check("PS: 할인 재저장에 DLC 판별 보존", d.get("content_type") == "game")
-    check("PS: 할인 재저장에 장르 보존", d.get("genres") == ["액션"])
-    check("PS: 가격은 그대로", d.get("price_raw") == {"x": 1})
-
-    # 목록에서 이미 온 값은 직전 값으로 덮지 않는다
-    item2 = FakeItem("CUSA1", {"release_date": "2024-12-31"})
-    col._keep_meta(item2)
-    check("PS: 새 값이 있으면 유지(덮어쓰지 않음)",
-          item2.extracted_data.get("release_date") == "2024-12-31")
-
-    # 직전 값이 없는 신규 상품은 그대로
-    item3 = FakeItem("NEW1", {})
-    col._keep_meta(item3)
-    check("PS: 신규 상품은 예외 없이 통과", item3.extracted_data == {})
-
-
-# ---------------------------------------------------------------- 병합 저장(A안)
 def test_xbox_empty_page_is_failure() -> None:
     """종류 페이지가 200 이지만 상품 0건이면 '실패'로 봐야 한다.
 
@@ -215,8 +175,7 @@ def test_merge_current_data() -> None:
 
 if __name__ == "__main__":
     test_xbox_kind_rank()
-    test_steam_enrich_fallback()
-    test_ps_keep_meta()
+    test_merge_covers_per_path_keys()
     test_xbox_empty_page_is_failure()
     test_collectors_have_repository_import()
     test_merge_current_data()
