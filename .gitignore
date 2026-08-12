@@ -11,3 +11,9 @@ venv/
 *.html
 *.json.gz
 data/
+
+# 단, 파서 회귀 테스트 픽스처는 저장소에 있어야 한다.
+# 실측 사고: 위 *.html 규칙이 tests/fixtures/steam_search.html 을 조용히 삼켜
+# 커밋이 안 됐고, CI 가 FileNotFoundError 로 계속 실패했다(로컬에선 파일이 있어
+# 통과하므로 알아채기 어려웠다).
+!tests/fixtures/*.html

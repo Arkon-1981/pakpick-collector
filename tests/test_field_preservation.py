@@ -173,12 +173,84 @@ def test_merge_current_data() -> None:
           src_old == {"publisher": "P"} and src_new == {"x": 1})
 
 
+def test_nintendo_regular_price_filled() -> None:
+    """할인 아닌 닌텐도 상품도 정가가 채워져야 한다 (스냅샷 무한 증식 방지).
+
+    실측 사고: 목록 파서는 할인 표시가 없으면 regular_price 를 None 으로 뒀는데,
+    가격 API 경로는 정가를 채웠다. 두 경로가 같은 상품에 다른 값을 써서 price_hash
+    가 매 수집마다 뒤집혔고, 가격이 하나도 안 변했는데 스냅샷이 계속 쌓였다
+    (74,100원 그대로인 상품에 8건 — regular 가 null/74100/null/74100…).
+    """
+    from parsers.nintendo import parse_list_page
+
+    # 할인 없는 타일 (oldPrice 없음) + 할인 타일 (oldPrice 있음)
+    # 실제 마크업 형식에 맞춘다 (Magento 타일 + 상품 URL 안의 10자리 이상 NSUID).
+    # 형식이 어긋나면 0건 파싱 → "전부 통과"로 새는 테스트가 되므로 개수를 먼저 본다.
+    html = """
+    <li class="product-item">
+      <a class="product-item-link" href="/p/70010000012345">정가 상품</a>
+      <span data-price-type="finalPrice" data-price-amount="74100"></span>
+    </li>
+    <li class="product-item">
+      <a class="product-item-link" href="/p/70010000067890">할인 상품</a>
+      <span data-price-type="finalPrice" data-price-amount="30000"></span>
+      <span data-price-type="oldPrice" data-price-amount="60000"></span>
+    </li>
+    """
+    items = parse_list_page(html)
+    by_id = {i.store_product_id: i for i in items}
+    plain = by_id.get("70010000012345")
+    sale = by_id.get("70010000067890")
+
+    check("nintendo: 타일 2개가 파싱된다", len(items) == 2)
+    if plain:
+        check("nintendo: 할인 아닌 상품도 정가가 채워짐",
+              plain.regular_price == 74100.0 and plain.final_price == 74100.0)
+        check("nintendo: 정가=현재가면 할인 아님", plain.is_on_sale is False)
+        check("nintendo: 할인 아니면 할인율 없음", plain.discount_percent is None)
+    if sale:
+        check("nintendo: 할인 상품은 그대로 판별",
+              sale.is_on_sale and sale.regular_price == 60000.0 and sale.final_price == 30000.0)
+
+
+def test_steam_composed_header_fallback() -> None:
+    """스팀이 assets.header 를 안 줄 때 조립한 404 주소를 스크린샷으로 대체한다.
+
+    실측: appid 4630450(신규 DLC)은 목록에서 조립한
+    .../steam/apps/4630450/header.jpg 가 404 였고(capsule 도 404) 카드에
+    브라우저 기본 '깨진 이미지'가 떴다. 스크린샷은 있으니 그걸 대표로 쓴다.
+    """
+    from collectors.steam import SteamCollector, _is_composed_header
+
+    check("조립 주소로 판별", _is_composed_header(
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/4630450/header.jpg"))
+    check("스팀이 준 해시 주소는 조립 아님", not _is_composed_header(
+        "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1/abc/header.jpg?t=1"))
+    check("None 은 조립 아님", not _is_composed_header(None))
+
+    shot = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/4630450/x/ss_x.1920x1080.jpg"
+
+    # ① 스팀이 대표 이미지를 안 줬고 우리가 조립했다 → 스크린샷으로 교체
+    item = FakeItem("4630450", image_url="https://cdn.cloudflare.steamstatic.com/steam/apps/4630450/header.jpg")
+    SteamCollector._apply_info(item, {"screenshots": [shot]})
+    check("조립 주소는 스크린샷으로 교체", item.image_url == shot)
+    check("갤러리 첫 장도 교체된 주소", (item.extracted_data.get("gallery") or [None])[0] == shot)
+
+    # ② 스팀이 준 주소가 있으면 그걸 쓴다 (교체하지 않는다)
+    real = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/9/h/header.jpg?t=2"
+    item2 = FakeItem("9", image_url="https://cdn.cloudflare.steamstatic.com/steam/apps/9/header.jpg")
+    SteamCollector._apply_info(item2, {"image_url": real, "screenshots": [shot]})
+    check("스팀이 준 주소가 우선", item2.image_url == real)
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
     test_xbox_empty_page_is_failure()
     test_collectors_have_repository_import()
     test_merge_current_data()
+    test_nintendo_regular_price_filled()
+    test_steam_composed_header_fallback()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))

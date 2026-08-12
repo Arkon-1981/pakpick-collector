@@ -22,6 +22,7 @@
 실행: python tests/test_parsers_fixtures.py   (pytest 불필요 — 기존 테스트와 같은 스타일)
 """
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -235,16 +236,47 @@ def test_mutations_are_detected() -> None:
 
 
 # ------------------------------------------------------------------ 픽스처 자체
+FIXTURE_FILES = ("steam_search.html", "xbox_catalog.json", "ps_next_data.json")
+
+
 def test_fixtures_present() -> None:
-    """픽스처가 저장소에 있고 비어 있지 않은지 (실수로 빈 파일이 커밋되는 것 방지)."""
-    for name in ("steam_search.html", "xbox_catalog.json", "ps_next_data.json"):
+    """픽스처가 저장소에 있고 비어 있지 않은지 (실수로 빈 파일이 커밋되는 것 방지).
+
+    ⚠️ '파일이 있다' 로는 부족해서 git 추적 여부까지 본다.
+    실측 사고: .gitignore 의 `*.html` 규칙이 steam_search.html 을 조용히 삼켜
+    커밋이 안 됐다. 로컬에는 파일이 있어 전부 통과했지만 CI 는 FileNotFoundError
+    로 계속 실패했다 — 로컬에서 절대 재현되지 않는 실패다.
+    """
+    tracked: set[str] = set()
+    try:
+        out = subprocess.run(["git", "ls-files", "tests/fixtures"], cwd=ROOT,
+                             capture_output=True, text=True, timeout=15)
+        tracked = {Path(l).name for l in out.stdout.split() if l}
+    except Exception:
+        tracked = set()          # git 이 없는 환경이면 이 검사는 건너뛴다
+
+    for name in FIXTURE_FILES:
         f = FIX / name
-        check(f"픽스처 존재: {name}", f.exists() and f.stat().st_size > 1000,
-              f"{f.stat().st_size if f.exists() else 0} bytes")
+        size = f.stat().st_size if f.exists() else 0
+        check(f"픽스처 존재: {name}", f.exists() and size > 1000, f"{size} bytes")
+        if tracked:
+            check(f"픽스처가 git 에 추적됨: {name}", name in tracked,
+                  ".gitignore 에 걸려 커밋이 안 되는 상태 — CI 에서만 깨진다")
+
+
+def _missing_fixtures() -> list[str]:
+    return [n for n in FIXTURE_FILES if not (FIX / n).exists()]
 
 
 if __name__ == "__main__":
     test_fixtures_present()
+    # 픽스처가 없으면 뒤 테스트는 예외로 죽어 원인이 안 보인다 — 여기서 멈춘다
+    if _missing_fixtures():
+        print()
+        print(f"실패: 픽스처 없음 — {', '.join(_missing_fixtures())}")
+        print("  (tests/fixtures/ 에 실제 스토어 응답이 있어야 한다. "
+              ".gitignore 의 *.html 규칙에 걸리지 않았는지 확인)")
+        raise SystemExit(1)
     test_steam_search()
     test_steam_price_fallback()
     test_xbox_catalog()
