@@ -10,7 +10,7 @@
   TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET   (dev.twitch.tv 앱 등록)
 
 옵션:
-  --limit N     한 번에 보강할 최대 개수 (기본 200)
+  --limit N     한 번에 보강할 최대 개수 (기본 600)
   --dry-run     저장하지 않고 매칭 결과만 출력
 
 매칭은 보수적으로 한다 — 제목 정규화 후 IGDB 이름/별칭과 정확히 일치할
@@ -196,7 +196,8 @@ def search_game(title: str) -> tuple[dict | None, str]:
         rows = igdb_query("games", (
             f'search "{esc}"; '
             "fields id,name,rating,rating_count,aggregated_rating,"
-            "aggregated_rating_count,alternative_names.name,genres.name,category; "
+            "aggregated_rating_count,alternative_names.name,genres.name,category,"
+            "parent_game,version_parent; "
             "limit 8;"
         ))
         time.sleep(REQUEST_GAP)
@@ -228,7 +229,9 @@ def search_game(title: str) -> tuple[dict | None, str]:
 
 GAME_FIELDS = (
     "id,name,rating,rating_count,aggregated_rating,"
-    "aggregated_rating_count,genres.name"
+    "aggregated_rating_count,genres.name,"
+    # 지역판/재발매는 별도 엔트리로 쪼개져 평점이 '원본'에만 붙는다 → 폴백용
+    "parent_game,version_parent"
 )
 
 
@@ -266,6 +269,51 @@ def match_steam_by_appid(appids: list[str]) -> dict[str, dict]:
         for r in rows:
             games[r["id"]] = r
     return {uid: games[gid] for uid, gid in id_map.items() if gid in games}
+
+
+def has_rating(g: dict) -> bool:
+    return bool(g.get("aggregated_rating")) or bool(g.get("rating"))
+
+
+def fetch_parent_ratings(games: list[dict]) -> dict[int, dict]:
+    """평점이 없는 게임의 '원본' 엔트리 평점을 가져온다. {자식id: 부모행}
+
+    IGDB 는 지역판·재발매를 별도 엔트리로 쪼개고 평점은 대표 엔트리에만 붙는
+    경우가 많다. 실측: '페르소나 5 스크램블 더 팬텀 스트라이커즈' 는 제목이
+    정확히 일치해(exact) 매칭되는데 평점이 비어 있다 — 평점은 서양 발매판
+    엔트리에 있다. 이런 유명작이 평점 없이 남는 걸 막는다.
+
+    version_parent(판본의 원본) 을 먼저, 없으면 parent_game(본편) 을 본다.
+    부모에도 평점이 없으면 넣지 않는다 — 없는 값을 억지로 만들지 않는다.
+    """
+    want: dict[int, int] = {}          # 자식 id → 부모 id
+    for g in games:
+        if has_rating(g):
+            continue
+        parent = g.get("version_parent") or g.get("parent_game")
+        if isinstance(parent, dict):   # 확장 응답 대비
+            parent = parent.get("id")
+        if isinstance(parent, int) and parent != g.get("id"):
+            want[g["id"]] = parent
+    if not want:
+        return {}
+
+    parents: dict[int, dict] = {}
+    pids = sorted(set(want.values()))
+    for i in range(0, len(pids), 100):
+        chunk = pids[i : i + 100]
+        rows = igdb_query("games", (
+            "fields id,name,rating,rating_count,aggregated_rating,aggregated_rating_count; "
+            f"where id = ({','.join(map(str, chunk))}); limit 100;"
+        ))
+        time.sleep(REQUEST_GAP)
+        for r in rows:
+            parents[r["id"]] = r
+    return {
+        child: parents[pid]
+        for child, pid in want.items()
+        if pid in parents and has_rating(parents[pid])
+    }
 
 
 def fetch_ttb(game_ids: list[int]) -> dict[int, dict]:
@@ -376,7 +424,7 @@ def fetch_candidates(limit: int) -> list[dict]:
     """신선(48h)하고 아직 보강 안 된 게임. 인기 순위 → 정가 순으로 우선한다."""
     done: set[int] = set()
     retry_before = (datetime.now(timezone.utc) - timedelta(days=RETRY_AFTER_DAYS)).isoformat()
-    for offset in range(0, 100_000, 1000):
+    for offset in range(0, 200_000, 1000):
         try:
             page = _sb("game_meta?select=store_item_id,igdb_id,enriched_at"
                        f"&limit=1000&offset={offset}") or []
@@ -397,7 +445,12 @@ def fetch_candidates(limit: int) -> list[dict]:
     iso = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat().replace("+00:00", "Z")
     picked: list[dict] = []
     # current_data 통째로는 받지 않는다 — PS 행 하나가 수십 KB (fetch_item_meta 와 같은 이유)
-    for offset in range(0, 10_000, 1000):
+    #
+    # ⚠️ 상한은 넉넉해야 한다. 예전엔 offset 10,000 에서 끊겼는데 신선한 상품이
+    #    13,889개로 늘어 뒤쪽 약 3,900개가 **영구히 후보가 못 됐다**. 앞쪽이 다
+    #    보강돼도 그 구간은 순서가 오지 않아 평점이 평생 비어 있게 된다.
+    #    페이지가 짧아지면 그때 멈추고, 상한은 폭주 방지용으로만 둔다.
+    for offset in range(0, 200_000, 1000):
         rows = _sb(
             "store_items?select=id,title,platform,store_product_id,"
             "ctype:current_data->>content_type,rank:current_data->popular_rank"
@@ -441,7 +494,7 @@ def to_hours(seconds) -> float | None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=200)
+    ap.add_argument("--limit", type=int, default=600)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--ko-backfill", action="store_true",
                     help="기존 매칭분의 ko_support 채우기 (015 SQL 이후 일회성)")
@@ -494,6 +547,15 @@ def main() -> None:
             print(f"  ✓ {conf:5} [{c['platform']}] {c['title'][:34]:34} → {game['name'][:40]}")
 
     matched_ids = sorted({g["id"] for _, g, _ in matched})
+    # 평점 없는 매칭분은 IGDB '원본' 엔트리 평점으로 채운다 (지역판 분리 대응)
+    try:
+        parents = fetch_parent_ratings([g for _, g, _ in matched])
+        if parents:
+            print(f"  원본 엔트리 평점 폴백: {len(parents)}건")
+    except Exception as exc:
+        print(f"  ! 원본 평점 조회 실패 — 폴백 없이 진행 ({exc})")
+        parents = {}
+
     # 보조 조회가 최종 실패해도 매칭 결과 자체는 저장한다 (전부 잃는 것보다 낫다)
     try:
         ttb = fetch_ttb(matched_ids)
@@ -516,15 +578,21 @@ def main() -> None:
     rows = []
     for c, g, conf in matched:
         t = ttb.get(g["id"]) or {}
+        # 평점만 원본 엔트리에서 빌려 온다 — 이름·장르는 매칭된 엔트리 그대로.
+        # 빌려 왔다는 사실은 match_confidence 에 남긴다(스키마 변경 없이 추적 가능).
+        pr = parents.get(g["id"])
+        rate = pr if pr else g
+        if pr:
+            conf = f"{conf}+parent"
         rows.append({
             "store_item_id": c["id"],
             "igdb_id": g["id"],
             "igdb_name": g.get("name"),
             "match_confidence": conf,
-            "critic_rating": round(g["aggregated_rating"], 1) if g.get("aggregated_rating") else None,
-            "critic_rating_count": g.get("aggregated_rating_count"),
-            "user_rating": round(g["rating"], 1) if g.get("rating") else None,
-            "user_rating_count": g.get("rating_count"),
+            "critic_rating": round(rate["aggregated_rating"], 1) if rate.get("aggregated_rating") else None,
+            "critic_rating_count": rate.get("aggregated_rating_count"),
+            "user_rating": round(rate["rating"], 1) if rate.get("rating") else None,
+            "user_rating_count": rate.get("rating_count"),
             "ttb_hastily_h": to_hours(t.get("hastily")),
             "ttb_normally_h": to_hours(t.get("normally")),
             "ttb_completely_h": to_hours(t.get("completely")),

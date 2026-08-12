@@ -78,42 +78,45 @@ def fetch_candidates(limit: int) -> list[dict]:
         if len(page) < 1000:
             break
 
-    # 신선(48h) + 할인 중인 상품을 정가 순으로
+    # 신선(48h) + 할인 중인 상품을 정가 높은 순으로
     from datetime import timedelta
     # timestamptz 의 '+00:00' 는 URL 에서 공백이 되어 깨지므로 'Z' 로
     iso = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat().replace("+00:00", "Z")
 
     fresh_new: list[dict] = []      # 리뷰 없음
     fresh_short: list[dict] = []    # 짧은 옛 평 — 재생성 대상
-    select = (
-        "id,title,platform,"
-        "price_snapshots(is_on_sale,regular_price,collected_at)"
-    )
-    # 페이지네이션
-    for offset in range(0, 6000, 1000):
+    # ⚠️ 예전엔 여기서 두 가지를 잘못했다.
+    #  ① offset 6,000 에서 끊겼다 — 신선한 상품이 13,889개로 늘어 절반 이상이
+    #     아예 후보가 못 됐다(id 순이라 뒤쪽 id 는 평생 순서가 오지 않는다).
+    #  ② 할인 여부를 판단하려고 상품마다 price_snapshots 를 임베드해 받았다.
+    #     6,000행 × 스냅샷이라 조회가 무거웠다.
+    # 이제 store_items.cur_is_on_sale / cur_regular_price 컬럼(트리거 갱신)이
+    # 있으니 필터·정렬을 DB 에서 끝낸다. DLC 제외도 여기서 함께 한다 —
+    # 예전엔 DLC 에도 한 줄 평을 생성했다.
+    select = "id,title,platform,cur_regular_price"
+    not_addon = "or=(current_data->>content_type.is.null,current_data->>content_type.neq.addon)"
+    for offset in range(0, 200_000, 1000):
         rows = _sb(
             f"store_items?select={select}&last_seen_at=gte.{iso}"
-            f"&order=id.asc&limit=1000&offset={offset}"
+            f"&cur_is_on_sale=is.true&{not_addon}"
+            f"&order=cur_regular_price.desc.nullslast,id.asc&limit=1000&offset={offset}"
         ) or []
         for r in rows:
             length = have.get(r["id"])
             if length is not None and length >= SHORT_REVIEW_LEN:
-                continue
-            snaps = sorted(
-                r.get("price_snapshots") or [],
-                key=lambda s: s["collected_at"], reverse=True,
-            )
-            if not snaps or not snaps[0].get("is_on_sale"):
                 continue
             title = clean_title(r.get("title") or "")
             if not title:
                 continue
             cand = {
                 "id": r["id"], "title": title, "platform": r["platform"],
-                "regular": snaps[0].get("regular_price") or 0,
+                "regular": r.get("cur_regular_price") or 0,
             }
             (fresh_new if length is None else fresh_short).append(cand)
         if len(rows) < 1000:
+            break
+        # DB 가 정가 내림차순으로 줬으므로 쿼터를 채웠으면 더 볼 필요가 없다
+        if len(fresh_new) >= limit:
             break
 
     # 새 평이 먼저(대작 우선), 남는 쿼터로 짧은 옛 평을 교체한다

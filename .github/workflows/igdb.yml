@@ -11,7 +11,10 @@ name: igdb
 on:
   schedule:
     # 매일 한국시간 04:10 (UTC 19:10) — 수집 이후, AI 리뷰(04:40) 이전
+    # 하루 2회 (한국 04:10 / 16:10). 남은 카탈로그를 빨리 따라잡기 위함 —
+    # 1회 200개로는 11,000개를 채우는 데 55일이 걸렸다.
     - cron: "10 19 * * *"
+    - cron: "10 7 * * *"
   workflow_dispatch:
     inputs:
       limit:
@@ -33,7 +36,7 @@ permissions:
 jobs:
   enrich:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50   # 600개면 IGDB 검색만 ~5분 + 응답 대기 (초당 3회 제한)
     concurrency:
       group: igdb
       cancel-in-progress: false
@@ -56,12 +59,12 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          LIMIT_IN: ${{ github.event.inputs.limit || '200' }}
+          LIMIT_IN: ${{ github.event.inputs.limit || '600' }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           KO_BACKFILL: ${{ github.event.inputs.ko_backfill || 'false' }}
         run: |
           LIMIT="$(printf '%s' "$LIMIT_IN" | tr -cd '0-9')"
-          LIMIT="${LIMIT:-200}"
+          LIMIT="${LIMIT:-600}"
           ARGS=(--limit "$LIMIT")
           [ "$DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           [ "$KO_BACKFILL" = "true" ] && ARGS+=(--ko-backfill)
