@@ -441,18 +441,10 @@ class NintendoCollector(BaseCollector):
             return
 
         have_filter = bool(sw2_ids)
-        # 갤러리 보강 대상: 할인율 상위 NINTENDO_GALLERY_MAX개 (피드에 뜨는 것과 일치)
-        by_disc = sorted(
-            collected, key=lambda t: t[0].discount_percent or 0, reverse=True
-        )
-        gallery_ids = {
-            item.store_product_id
-            for item, _ in by_disc[: config.NINTENDO_GALLERY_MAX]
-        }
 
         # 이전 실행이 채워 둔 갤러리(2장+)를 재저장이 지우지 않게 미리 받아 둔다.
-        # 이 보존이 없으면 보강 대상(상위 150개)에서 빠지는 순간 스크린샷이 타일
-        # 1장으로 되돌아가, 커버리지가 실행마다 리셋됐다 (실측: 닌텐도만 31%).
+        # 이 보존이 없으면 보강 대상에서 빠지는 순간 스크린샷이 타일 1장으로
+        # 되돌아가, 커버리지가 실행마다 리셋됐다 (실측: 닌텐도만 31%).
         # 재저장이 다른 경로(일정=신작표시·인기=순위·상세=세대)가 채워 둔 값을
         # 지우지 않게 미리 받아 둔다. gallery 뿐 아니라 content_kind·release_date·
         # platform_generation·subscription 도 이 경로가 안 건드리면 보존해야 한다
@@ -469,6 +461,8 @@ class NintendoCollector(BaseCollector):
         except Exception:
             logger.exception("[nintendo] 기존 메타 조회 실패 — 보존 없이 진행")
             prev_meta = {}
+
+        gallery_ids = self._pick_gallery_targets(collected, prev_meta)
 
         for item, raw_doc_id in collected:
             pid = item.store_product_id
@@ -496,14 +490,39 @@ class NintendoCollector(BaseCollector):
                     item.extracted_data["gallery"] = prev
             self.save_item(item, raw_doc_id)
 
+        missing = sum(
+            1 for item, _ in collected
+            if len((prev_meta.get(item.store_product_id) or {}).get("gallery") or []) <= 1
+        )
         logger.info(
-            "[nintendo] 총 %d개 저장 (갤러리 대상 상위 %d개)",
-            len(collected), len(gallery_ids),
+            "[nintendo] 총 %d개 저장 (갤러리 없는 상품 %d개 중 이번에 %d개 보강)",
+            len(collected), missing, len(gallery_ids),
         )
 
     # -----------------------------------------------------------------
     # 상세 스크린샷 갤러리 보강
     # -----------------------------------------------------------------
+
+    @staticmethod
+    def _pick_gallery_targets(collected, prev_meta) -> set[str]:
+        """상세를 받아 스크린샷을 채울 상품을 고른다 — **아직 없는 것만**.
+
+        ⚠️ 예전엔 '할인율 상위 N개'를 그냥 골랐다. 그 목록은 실행마다 거의 같아서
+        이미 갤러리가 있는 상품이 자리를 차지하고, **N위 밖 상품은 영구히 선택되지
+        않았다**. 실측: 닌텐도 신선 상품의 64%가 스샷 없음(0~1장) — 스팀 3%,
+        엑박 0%, PS 18% 와 비교하면 닌텐도만 유별났다.
+
+        이미 채워진 상품은 어차피 _enrich_detail 이 상세를 안 받고 재사용하므로
+        후보에 넣어도 이득이 없다. 없는 것만 골라야 매 실행이 실제로 전진한다.
+        그 안에서는 할인율 높은 순 — 피드에서 먼저 보이는 것부터 채운다.
+        """
+        need = [
+            (item, item.discount_percent or 0)
+            for item, _ in collected
+            if len((prev_meta.get(item.store_product_id) or {}).get("gallery") or []) <= 1
+        ]
+        need.sort(key=lambda t: t[1], reverse=True)
+        return {item.store_product_id for item, _ in need[: config.NINTENDO_GALLERY_MAX]}
 
     def _enrich_detail(self, item) -> None:
         """갤러리(스크린샷) 보강 — 상세 페이지 서버 HTML의 x-magento-init에서 추출.
