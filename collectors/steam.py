@@ -77,6 +77,15 @@ GETITEMS_REQUEST = {
 PAGE_SIZE = 100
 
 
+def _is_composed_header(url: str | None) -> bool:
+    """appid 로 조립한 legacy 헤더 주소인가 (스팀이 준 해시 주소가 아닌).
+
+    조립 주소는 `.../steam/apps/<appid>/header.jpg` 형태로, 그 상품에 파일이
+    없으면 404 다. 스팀이 준 주소는 `store_item_assets/.../<해시>/header.jpg`.
+    """
+    return bool(url) and "/store_item_assets/" not in url and url.endswith("header.jpg")
+
+
 class SteamCollector(BaseCollector):
     platform = "steam"
 
@@ -360,6 +369,14 @@ class SteamCollector(BaseCollector):
 
         shots = info.get("screenshots")
         if shots:
+            # 스팀이 assets.header 를 아직 안 준 신규 상품은 image_url 이 목록에서
+            # appid 로 조립한 주소(.../apps/<appid>/header.jpg)로 남는데, 그 파일이
+            # 없어서 404 가 난다(실측: appid 4630450 — header/capsule 둘 다 404).
+            # 스크린샷은 있으므로 그걸 대표로 쓴다. 없는 주소를 대표로 두는 것보다
+            # 실제 있는 그림이 낫다. 다음 수집에서 스팀이 header 를 주면 교체된다.
+            if info.get("image_url") is None and _is_composed_header(item.image_url):
+                item.image_url = shots[0]
+
             header = item.image_url
             gallery = ([header] if header else []) + [s for s in shots if s != header]
             data["gallery"] = gallery[:6]

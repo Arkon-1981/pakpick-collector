@@ -213,6 +213,36 @@ def test_nintendo_regular_price_filled() -> None:
               sale.is_on_sale and sale.regular_price == 60000.0 and sale.final_price == 30000.0)
 
 
+def test_steam_composed_header_fallback() -> None:
+    """스팀이 assets.header 를 안 줄 때 조립한 404 주소를 스크린샷으로 대체한다.
+
+    실측: appid 4630450(신규 DLC)은 목록에서 조립한
+    .../steam/apps/4630450/header.jpg 가 404 였고(capsule 도 404) 카드에
+    브라우저 기본 '깨진 이미지'가 떴다. 스크린샷은 있으니 그걸 대표로 쓴다.
+    """
+    from collectors.steam import SteamCollector, _is_composed_header
+
+    check("조립 주소로 판별", _is_composed_header(
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/4630450/header.jpg"))
+    check("스팀이 준 해시 주소는 조립 아님", not _is_composed_header(
+        "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1/abc/header.jpg?t=1"))
+    check("None 은 조립 아님", not _is_composed_header(None))
+
+    shot = "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/4630450/x/ss_x.1920x1080.jpg"
+
+    # ① 스팀이 대표 이미지를 안 줬고 우리가 조립했다 → 스크린샷으로 교체
+    item = FakeItem("4630450", image_url="https://cdn.cloudflare.steamstatic.com/steam/apps/4630450/header.jpg")
+    SteamCollector._apply_info(item, {"screenshots": [shot]})
+    check("조립 주소는 스크린샷으로 교체", item.image_url == shot)
+    check("갤러리 첫 장도 교체된 주소", (item.extracted_data.get("gallery") or [None])[0] == shot)
+
+    # ② 스팀이 준 주소가 있으면 그걸 쓴다 (교체하지 않는다)
+    real = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/9/h/header.jpg?t=2"
+    item2 = FakeItem("9", image_url="https://cdn.cloudflare.steamstatic.com/steam/apps/9/header.jpg")
+    SteamCollector._apply_info(item2, {"image_url": real, "screenshots": [shot]})
+    check("스팀이 준 주소가 우선", item2.image_url == real)
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
@@ -220,6 +250,7 @@ if __name__ == "__main__":
     test_collectors_have_repository_import()
     test_merge_current_data()
     test_nintendo_regular_price_filled()
+    test_steam_composed_header_fallback()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))
