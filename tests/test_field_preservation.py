@@ -243,6 +243,43 @@ def test_steam_composed_header_fallback() -> None:
     check("스팀이 준 주소가 우선", item2.image_url == real)
 
 
+def test_nintendo_gallery_targets_missing_first() -> None:
+    """갤러리 보강 대상은 '아직 없는 것' 중에서 골라야 한다.
+
+    실측 사고: '할인율 상위 N개'를 그냥 골랐더니 그 목록이 실행마다 거의 같아
+    이미 갤러리가 있는 상품이 자리를 먹고, N위 밖 상품은 영구히 선택되지 않았다.
+    닌텐도 신선 상품의 64%가 스샷 없음(스팀 3% / 엑박 0% / PS 18%).
+    """
+    import collectors.nintendo as n
+    from common import config
+
+    class P:                      # 할인율만 있는 대역
+        def __init__(self, pid, disc):
+            self.store_product_id, self.discount_percent = pid, disc
+
+    collected = [(P("a", 90), 1), (P("b", 80), 1), (P("c", 70), 1), (P("d", 60), 1)]
+    prev = {
+        "a": {"gallery": ["x", "y", "z"]},   # 이미 3장 → 대상 아님
+        "b": {"gallery": ["x"]},             # 1장(타일뿐) → 대상
+        "c": {},                             # 없음 → 대상
+        # d 는 prev_meta 에 아예 없음 → 대상
+    }
+    old_max = config.NINTENDO_GALLERY_MAX
+    try:
+        config.NINTENDO_GALLERY_MAX = 2
+        picked = n.NintendoCollector._pick_gallery_targets(collected, prev)
+        check("갤러리 있는 상품은 대상 제외", "a" not in picked)
+        check("1장뿐인 상품은 대상", "b" in picked)
+        check(f"상한 안에서 할인율 높은 순 {sorted(picked)}", picked == {"b", "c"})
+
+        config.NINTENDO_GALLERY_MAX = 10
+        picked_all = n.NintendoCollector._pick_gallery_targets(collected, prev)
+        check("직전 값이 아예 없는 상품도 대상", "d" in picked_all)
+        check(f"여유 있으면 없는 것 전부 {sorted(picked_all)}", picked_all == {"b", "c", "d"})
+    finally:
+        config.NINTENDO_GALLERY_MAX = old_max
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
@@ -251,6 +288,7 @@ if __name__ == "__main__":
     test_merge_current_data()
     test_nintendo_regular_price_filled()
     test_steam_composed_header_fallback()
+    test_nintendo_gallery_targets_missing_first()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))
