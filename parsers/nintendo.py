@@ -98,6 +98,15 @@ def parse_list_page(html: str) -> list[ParsedItem]:
         if is_on_sale:
             discount_percent = round((1 - final_price / regular_price) * 100, 2)
 
+        # 할인 중이 아니면 정가 = 현재가. 스팀·PS·엑박 파서가 모두 이렇게 하는데
+        # 닌텐도만 None 으로 뒀다가 실측 사고가 났다: 가격 API 경로는 정가를 채우고
+        # 이 목록 경로는 비워서, 같은 상품에 두 값이 번갈아 저장됐다. 가격이 하나도
+        # 안 변했는데 price_hash 가 매번 뒤집혀 **수집할 때마다** 스냅샷이 새로 쌓였다
+        # (실측: 74,100원 그대로인 상품에 8건 — regular 가 null/74100/null/74100…).
+        # is_on_sale 판정은 위에서 이미 끝났으므로 여기서 채워도 결과가 안 바뀐다.
+        if regular_price is None and final_price is not None:
+            regular_price = final_price
+
         # 출시일 등 타일에 있는 텍스트 정보도 최대한 수집
         release_text = None
         for label in tile.select(".product-item-attribute, .release-date, .attribute"):
