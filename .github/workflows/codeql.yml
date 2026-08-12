@@ -25,7 +25,7 @@ jobs:
         # actions = 워크플로 자체의 인젝션·권한 문제까지 검사한다
         language: [python, actions]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v3
         with:
           language: ${{ matrix.language }}

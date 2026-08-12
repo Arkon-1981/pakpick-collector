@@ -51,7 +51,7 @@ jobs:
       COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
     steps:
       - name: 코드 내려받기
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 파이썬 설치
         uses: actions/setup-python@v7
