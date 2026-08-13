@@ -108,16 +108,29 @@ _PS_ART_PRIORITY = {
 }
 
 
+# 스크린샷이 아예 없는 상품에서 갤러리를 채울 '가로 아트' 우선순위.
+# 소니는 옛 게임·에디션·DLC 에 SCREENSHOT 을 안 주는 경우가 많다(실측: 신선한 PS
+# 상품의 18%가 스샷 없음. 그중 대부분은 단품 GraphQL 로 다시 물어봐도 같은 응답이라
+# '더 받아올' 스크린샷이 존재하지 않는다). 그럴 때 대표 1장만 남아 캐러셀이 빈다.
+# 이미 받아 둔 다른 아트를 쓰면 추가 요청 0회로 몇 장이라도 채울 수 있다.
+# ⚠️ LOGO(투명 로고)와 PORTRAIT_BANNER(세로)는 제외 — 16:9 카드에서 망가진다.
+_PS_FALLBACK_ART = ("BACKGROUND", "SIXTEEN_BY_NINE_BANNER", "EDITION_KEY_ART",
+                    "GAMEHUB_COVER_ART", "MASTER", "FOUR_BY_THREE_BANNER")
+
+
 def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
     """media 배열에서 (대표 이미지, 갤러리)을 뽑는다.
 
     갤러리 = [대표 키아트 1장] + [게임 스크린샷들].
     (예전엔 키아트 여러 버전을 다 넣어 '같은 그림 다른 크기'가 반복됐음 → 스샷 위주로 교체)
+    스크린샷이 하나도 없으면 그때만 다른 가로 아트로 채운다 — 대표 1장짜리
+    캐러셀보다는 낫고, 스샷이 있는 상품의 표시는 예전 그대로다.
     """
     if not isinstance(media, list):
         return None, []
     arts: list[tuple[int, str]] = []   # 대표 후보 (키아트)
     shots: list[str] = []              # 게임 스크린샷
+    others: list[tuple[int, str]] = [] # 스샷이 없을 때 쓸 예비 아트
     for m in media:
         if isinstance(m, dict) and "__ref" in m:
             m = apollo.get(m["__ref"], {})
@@ -130,9 +143,12 @@ def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
         if role == "SCREENSHOT":
             if url not in shots:
                 shots.append(url)
-        elif role in _PS_ART_PRIORITY:
+            continue
+        if role in _PS_ART_PRIORITY:
             arts.append((_PS_ART_PRIORITY[role], url))
-        # LOGO(투명 로고)·BACKGROUND·PORTRAIT_BANNER 등은 대표/스샷 어느 쪽도 아님 → 제외
+        if role in _PS_FALLBACK_ART:
+            others.append((_PS_FALLBACK_ART.index(role), url))
+        # LOGO(투명 로고)·PORTRAIT_BANNER(세로) 는 어느 쪽도 아님 → 제외
 
     arts.sort(key=lambda x: x[0])
     representative = arts[0][1] if arts else (shots[0] if shots else None)
@@ -143,7 +159,13 @@ def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
     for url in shots:
         if url not in gallery:
             gallery.append(url)
-    gallery = gallery[:6]  # 대표 1 + 스샷 최대 5
+    if not shots:
+        # 스샷이 없을 때만 — 대표로 이미 쓴 것은 빼고 나머지 아트를 순서대로
+        others.sort(key=lambda x: x[0])
+        for _, url in others:
+            if url not in gallery:
+                gallery.append(url)
+    gallery = gallery[:6]  # 대표 1 + 스샷(또는 예비 아트) 최대 5
     return representative, gallery
 
 
