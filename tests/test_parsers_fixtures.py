@@ -155,28 +155,95 @@ def test_xbox_catalog() -> None:
 
 # ------------------------------------------------------------------ playstation
 def _ps_failures(raw: str) -> list[tuple[str, bool, str]]:
-    """__NEXT_DATA__ JSON — PS 는 페이지 HTML 안의 이 JSON 에서 상품을 읽는다."""
-    from parsers.playstation import parse_products_from_next_data
+    """categoryGridRetrieve 의 products 응답 — 할인 피드의 핵심 경로.
 
-    items = parse_products_from_next_data(json.loads(raw))
-    spider = next((i for i in items if "MARVELSPIDERMAN2" in i.store_product_id), None)
+    픽스처는 cat.gma.AllDeals(모든 할인) 첫 30건이라 대부분이 할인 중이어야 한다.
+    """
+    from parsers.playstation import parse_products_from_graphql
+
+    items = parse_products_from_graphql(json.loads(raw))
+    first = items[0] if items else None
     return [
-        ("PS: 상품이 파싱된다", len(items) >= 5, f"{len(items)}개"),
+        ("PS: 상품이 파싱된다", len(items) >= 20, f"{len(items)}개"),
         ("PS: 모든 상품에 product id", bool(items) and all(i.store_product_id for i in items), ""),
         ("PS: 모든 상품에 제목", bool(items) and all(i.title for i in items), ""),
+        ("PS: 모든 상품에 이미지", bool(items) and all(i.image_url for i in items), ""),
         ("PS: 가격이 정상 범위", _prices_sane(items, allow_zero=True), ""),
-        ("PS: 대부분 가격이 있다", _priced_ratio(items) >= 0.5, f"{_priced_ratio(items):.0%}"),
+        ("PS: 전부 가격이 있다", _priced_ratio(items) == 1.0, f"{_priced_ratio(items):.0%}"),
+        # 할인 카테고리 픽스처 — 할인 인식과 할인율 계산이 같이 살아 있어야 한다
+        ("PS: 대부분 할인으로 인식", sum(1 for i in items if i.is_on_sale) >= len(items) - 2,
+         f"{sum(1 for i in items if i.is_on_sale)}/{len(items)}"),
+        ("PS: 할인 상품에 할인율", all(i.discount_percent for i in items if i.is_on_sale), ""),
         # PS 는 원본 노드를 통째로 보관한다 — 웹의 플랫폼 표시·구독 배지가 여기서 나온다
         ("PS: 원본 노드를 싣는다", bool(items) and all(i.extracted_data.get("node") for i in items), ""),
-        ("PS: 알려진 상품이 있다(스파이더맨 2)", spider is not None, ""),
-        ("PS: 스파이더맨 2 가격 고정값",
-         bool(spider) and (spider.final_price, spider.discount_percent) == (33516.0, 57.0),
-         f"{spider.final_price}/{spider.discount_percent}" if spider else "없음"),
+        # 게임/DLC 판별은 목록 응답의 표시 분류로만 한다(추가 요청 0회).
+        # 이게 죽으면 게임 피드가 다시 의상·레벨 같은 DLC 로 61% 차게 된다.
+        ("PS: 표시 분류로 게임/DLC 판별",
+         bool(items) and all(i.extracted_data.get("content_type") for i in items), ""),
+        # 3장 = 대표 + 스크린샷 2장 이상. 2장으로 재면 SCREENSHOT 역할이 사라져도
+        # 예비 아트 폴백이 메워 통과해 버린다(실측: 최소 3 → 2). 스샷 경로를 지키려면
+        # 여기서 3장을 요구해야 한다.
+        ("PS: 갤러리가 3장 이상",
+         bool(items) and all(len(i.extracted_data.get("gallery") or []) >= 3 for i in items),
+         f"최소 {min((len(i.extracted_data.get('gallery') or []) for i in items), default=0)}장"),
+        # 고정 회귀값 — 파서가 이 픽스처에서 뽑던 값
+        ("PS: 첫 상품 고정값(검은 신화: 오공)",
+         bool(first) and first.store_product_id == "HP6545-PPSA23226_00-GAME000000000000",
+         first.store_product_id if first else "없음"),
+        ("PS: 첫 상품 가격 고정값",
+         bool(first) and (first.regular_price, first.final_price, first.discount_percent)
+         == (64800.0, 45360.0, 30.0),
+         f"{first.regular_price}/{first.final_price}/{first.discount_percent}" if first else "없음"),
     ]
 
 
-def test_ps_next_data() -> None:
-    _report(_ps_failures((FIX / "ps_next_data.json").read_text()))
+def test_ps_grid() -> None:
+    _report(_ps_failures((FIX / "ps_grid.json").read_text()))
+
+
+def _ps_concept_failures(raw: str) -> list[tuple[str, bool, str]]:
+    """concepts 로만 오는 카테고리('신규 발매'·'무료 게임') 응답.
+
+    Concept 은 게임 단위 엔티티라 products[0].id 가 실제 상품 ID다. 이걸 놓치면
+    concept id(숫자)가 상품 ID로 저장돼 기존 카탈로그와 매칭이 통째로 깨진다.
+    가격은 concepts 에 실려 오지 않는 것이 정상이고, 수집기가 단품 조회로 채운다.
+    """
+    from parsers.playstation import parse_concepts_from_graphql
+
+    items = parse_concepts_from_graphql(json.loads(raw))
+    return [
+        ("PS concept: 상품이 파싱된다", len(items) >= 20, f"{len(items)}개"),
+        ("PS concept: 상품 ID가 concept id 가 아니다",
+         bool(items) and all("-" in i.store_product_id and not i.store_product_id.isdigit()
+                             for i in items),
+         next((i.store_product_id for i in items if i.store_product_id.isdigit()), "")),
+        ("PS concept: 모든 상품에 제목", bool(items) and all(i.title for i in items), ""),
+        ("PS concept: 모든 상품에 이미지", bool(items) and all(i.image_url for i in items), ""),
+        ("PS concept: 가격이 정상 범위", _prices_sane(items, allow_zero=True), ""),
+    ]
+
+
+def test_ps_grid_concepts() -> None:
+    _report(_ps_concept_failures((FIX / "ps_grid_concepts.json").read_text()))
+
+
+def test_ps_gallery_art_fallback() -> None:
+    """스크린샷이 없으면 이미 받아 둔 다른 가로 아트로 갤러리를 메운다(의도된 동작).
+
+    소니는 옛 게임·에디션·DLC 에 SCREENSHOT 을 안 준다. 그때 캐러셀이 1장으로
+    쪼그라들지 않게 예비 아트를 쓴다 — 그래서 'SCREENSHOT 이 사라졌다'만으로는
+    갤러리가 비지 않는다. 이 동작을 여기서 고정해 둔다.
+    """
+    from parsers.playstation import parse_products_from_graphql
+
+    raw = (FIX / "ps_grid.json").read_text()
+    normal = parse_products_from_graphql(json.loads(raw))
+    no_shots = parse_products_from_graphql(json.loads(raw.replace('"SCREENSHOT"', '"zzzSHOT"')))
+    sizes = [len(i.extracted_data.get("gallery") or []) for i in no_shots]
+    check("PS: 스샷이 없어도 갤러리가 2장 이상 남는다",
+          bool(sizes) and min(sizes) >= 2, f"최소 {min(sizes) if sizes else 0}장")
+    check("PS: 그래도 스샷이 있을 때보다는 적다",
+          sum(sizes) < sum(len(i.extracted_data.get("gallery") or []) for i in normal), "")
 
 
 # ------------------------------------------------------------------ 변이 테스트
@@ -202,15 +269,29 @@ _MUTATIONS: dict[str, tuple[str, list[tuple[str, str]]]] = {
         ("ImagePurpose 키", [('"ImagePurpose"', '"zzzPurpose"')]),
         ("Purchase 판정(Actions)", [('"Actions"', '"zzzActions"')]),
     ]),
-    "ps_next_data.json": ("ps", [
+    "ps_grid.json": ("ps", [
+        ("products 배열", [('"products"', '"zzzproducts"')]),
         ("price 노드", [('"price"', '"zzzprice"')]),
         ("basePrice 키", [('"basePrice"', '"zzzBase"')]),
         ("discountedPrice 키", [('"discountedPrice"', '"zzzDisc"')]),
+        ("discountText 키", [('"discountText"', '"zzzText"')]),
         ("name 키", [('"name"', '"zzzname"')]),
+        ("media 배열", [('"media"', '"zzzmedia"')]),
+        # 스샷이 사라지면 예비 아트가 갤러리를 메우므로(설계된 동작),
+        # 위 검사가 "3장 이상"이어야 잡힌다 — test_ps_gallery_art_fallback 참고
+        ("SCREENSHOT 역할", [('"SCREENSHOT"', '"zzzSHOT"')]),
+        ("표시 분류 키", [('"localizedStoreDisplayClassification"', '"zzzClass"')]),
+    ]),
+    "ps_grid_concepts.json": ("ps_concept", [
+        ("concepts 배열", [('"concepts"', '"zzzconcepts"')]),
+        ("concept 안의 products", [('"products"', '"zzzproducts"')]),
+        ("name 키", [('"name"', '"zzzname"')]),
+        ("media 배열", [('"media"', '"zzzmedia"')]),
     ]),
 }
 
-_FAILURE_FN = {"steam": _steam_failures, "xbox": _xbox_failures, "ps": _ps_failures}
+_FAILURE_FN = {"steam": _steam_failures, "xbox": _xbox_failures, "ps": _ps_failures,
+               "ps_concept": _ps_concept_failures}
 
 
 def test_mutations_are_detected() -> None:
@@ -236,7 +317,8 @@ def test_mutations_are_detected() -> None:
 
 
 # ------------------------------------------------------------------ 픽스처 자체
-FIXTURE_FILES = ("steam_search.html", "xbox_catalog.json", "ps_next_data.json")
+FIXTURE_FILES = ("steam_search.html", "xbox_catalog.json",
+                 "ps_grid.json", "ps_grid_concepts.json")
 
 
 def test_fixtures_present() -> None:
@@ -280,7 +362,9 @@ if __name__ == "__main__":
     test_steam_search()
     test_steam_price_fallback()
     test_xbox_catalog()
-    test_ps_next_data()
+    test_ps_grid()
+    test_ps_grid_concepts()
+    test_ps_gallery_art_fallback()
     test_mutations_are_detected()
     print()
     if fails:
