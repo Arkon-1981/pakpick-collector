@@ -280,6 +280,41 @@ def test_nintendo_gallery_targets_missing_first() -> None:
         config.NINTENDO_GALLERY_MAX = old_max
 
 
+def test_ps_gallery_fallback_art() -> None:
+    """PS: 스크린샷이 없으면 다른 가로 아트로 갤러리를 채운다.
+
+    소니는 옛 게임·에디션·DLC 에 SCREENSHOT 을 안 준다(실측: 신선한 PS 상품의
+    18~24%가 스샷 없음. 단품 GraphQL 로 다시 물어봐도 같은 응답이라 '더 받아올'
+    스크린샷이 존재하지 않는다). 그때 대표 1장만 남아 캐러셀이 빈다.
+    이미 받아 둔 아트를 쓰면 추가 요청 0회로 채울 수 있다.
+    """
+    from parsers.playstation import _images_from_media
+
+    def media(*roles):
+        return [{"role": r, "type": "IMAGE", "url": f"http://x/{r}"} for r in roles]
+
+    # ① 스샷이 있으면 예전 그대로 — 예비 아트를 섞지 않는다
+    rep, g = _images_from_media(
+        media("GAMEHUB_COVER_ART", "SCREENSHOT", "SCREENSHOT", "BACKGROUND", "LOGO"), {})
+    check("PS: 스샷 있으면 대표+스샷만", g == ["http://x/GAMEHUB_COVER_ART", "http://x/SCREENSHOT"])
+    check("PS: 스샷 있을 때 BACKGROUND 안 섞임", "http://x/BACKGROUND" not in g)
+
+    # ② 스샷이 없으면 예비 아트로 채운다
+    rep2, g2 = _images_from_media(media("MASTER", "BACKGROUND", "GAMEHUB_COVER_ART", "LOGO"), {})
+    check(f"PS: 스샷 없으면 예비 아트로 채움 {g2}", len(g2) >= 3)
+    check(f"PS: 대표는 우선순위대로(COVER_ART) {rep2}", rep2 == "http://x/GAMEHUB_COVER_ART")
+    check("PS: 투명 로고는 제외", "http://x/LOGO" not in g2)
+    check("PS: 대표가 갤러리에 중복되지 않음", len(g2) == len(set(g2)))
+
+    # ③ 세로 배너는 16:9 카드에서 깨지므로 제외
+    _, g3 = _images_from_media(media("MASTER", "PORTRAIT_BANNER"), {})
+    check(f"PS: 세로 배너는 제외 {g3}", g3 == ["http://x/MASTER"])
+
+    # ④ 정말 한 장뿐이면 한 장 (없는 걸 만들지 않는다)
+    _, g4 = _images_from_media(media("MASTER"), {})
+    check("PS: 이미지가 하나뿐이면 한 장 그대로", g4 == ["http://x/MASTER"])
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
@@ -289,6 +324,7 @@ if __name__ == "__main__":
     test_nintendo_regular_price_filled()
     test_steam_composed_header_fallback()
     test_nintendo_gallery_targets_missing_first()
+    test_ps_gallery_fallback_art()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))
