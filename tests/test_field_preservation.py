@@ -6,6 +6,7 @@
 
 기존 테스트와 같은 스크립트 스타일(pytest 불필요): python tests/test_field_preservation.py
 """
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -358,6 +359,159 @@ def test_ps_content_type_from_classification() -> None:
           item3 is not None and "content_type" not in item3.extracted_data)
 
 
+def test_ps_concept_price_enrichment() -> None:
+    """concepts 카테고리(신작·무료)의 가격 보강 규칙.
+
+    실측 사고 배경: 소니가 목록을 클라이언트 렌더링으로 바꾼 뒤 신작·무료 카테고리는
+    grid 가 concepts 로만 응답하고 concepts 에는 price 가 없다. 안 채우면 무료 탭이
+    가격 없는 카드로 채워진다.
+    """
+    from collectors.base import ParsedItem
+    from collectors.playstation import PlaystationCollector
+    from common import config
+
+    def item(pid):
+        return ParsedItem(store_product_id=pid, title=pid, store_url=None, image_url=None,
+                          regular_price=None, sale_price=None, final_price=None,
+                          discount_percent=None, sale_end_at=None, is_on_sale=False,
+                          extracted_data={})
+
+    # productRetrieveForCtasWithPrice 응답을 흉내 낸 것 (실측 형태)
+    def cta(base, disc, *, applicability="APPLICABLE", end=None, tied=False):
+        return {"data": {"productRetrieve": {"webctas": [{"type": "ADD_TO_CART", "price": {
+            "applicability": applicability, "basePriceValue": base, "discountedValue": disc,
+            "discountText": None, "endTime": end, "isTiedToSubscription": tied,
+        }}]}}}
+
+    responses = {
+        "FREE": cta(0, 0),                                   # 무료 게임
+        "SALE": cta(80000, 60000, end="1795000000000"),       # 25% 할인
+        "PLUS": cta(80000, 40000, applicability="UPSELL"),    # PS Plus 전용가
+        "PLAIN": cta(50000, 50000),                           # 정가
+    }
+    col = PlaystationCollector.__new__(PlaystationCollector)
+    col._cta_ok = True
+    col._price_fetched = 0
+    col._job_deadline = float("inf")
+    col._gql_product = lambda op, h, pid: responses.get(pid)
+
+    items = [item(k) for k in ("FREE", "SALE", "PLUS", "PLAIN")]
+    old = config.PS_CONCEPT_PRICE_MAX
+    config.PS_CONCEPT_PRICE_MAX = 100
+    try:
+        filled = col._enrich_concept_prices(items)
+    finally:
+        config.PS_CONCEPT_PRICE_MAX = old
+    by = {i.store_product_id: i for i in items}
+
+    check(f"PS concept: 4건 모두 가격이 채워진다 (실제 {filled})", filled == 4)
+    # 무료 게임은 0원으로 채워져야 무료 탭에 뜬다 (None 이면 빠진다)
+    check("PS concept: 무료는 0원",
+          (by["FREE"].regular_price, by["FREE"].final_price) == (0, 0) and not by["FREE"].is_on_sale)
+    check("PS concept: 할인은 할인가·할인율·종료일까지",
+          by["SALE"].is_on_sale and by["SALE"].final_price == 60000
+          and by["SALE"].discount_percent == 25.0 and by["SALE"].sale_end_at is not None)
+    # PS Plus 전용가는 일반 이용자의 체감가가 아니다 → 할인으로 표시하면 안 된다
+    check("PS concept: PS Plus 전용가는 할인 아님",
+          not by["PLUS"].is_on_sale and by["PLUS"].final_price == 80000
+          and by["PLUS"].discount_percent is None)
+    check("PS concept: 정가는 그대로",
+          not by["PLAIN"].is_on_sale and by["PLAIN"].final_price == 50000)
+
+    # 상한은 '실행 전체' 기준 — 페이지마다 불리므로 지역 카운터면 사실상 무제한이 된다
+    col2 = PlaystationCollector.__new__(PlaystationCollector)
+    col2._cta_ok = True
+    col2._price_fetched = 0
+    col2._job_deadline = float("inf")
+    calls = []
+    col2._gql_product = lambda op, h, pid: calls.append(pid) or cta(1000, 1000)
+    config.PS_CONCEPT_PRICE_MAX = 3
+    try:
+        for _ in range(3):   # 3페이지 × 2건
+            col2._enrich_concept_prices([item("A"), item("B")])
+    finally:
+        config.PS_CONCEPT_PRICE_MAX = old
+    check(f"PS concept: 가격 조회 상한이 실행 전체 기준 ({len(calls)}회)", len(calls) == 3)
+
+
+def test_ps_html_list_path_is_gone() -> None:
+    """HTML 목록 경로가 폴백으로도 남아 있지 않은지.
+
+    소니가 목록을 클라이언트 렌더링으로 바꿔 이 경로는 0건을 돌려준다. 폴백으로 남기면
+    GraphQL 이 한 번 흔들릴 때 시간예산을 태우며 '조용한 부분 수집'으로 고장을 감춘다
+    (실측: 8회 연속 실패 동안 new/upcoming/free 가 매번 0건이었다).
+    """
+    import parsers.playstation as pp
+    from pathlib import Path
+
+    src = Path("collectors/playstation.py").read_text()
+    # 사고 경위는 주석으로 남겨 두므로 '코드'에만 없어야 한다
+    code = "\n".join(l for l in src.splitlines() if not l.strip().startswith("#"))
+    for dead in ("parse_products_from_next_data", "parse_concepts_from_next_data",
+                 "extract_next_data", "DEALS_URL", "CATEGORY_URL_RE"):
+        check(f"PS: 수집기에 죽은 HTML 경로가 없다 ({dead})", dead not in code)
+    for dead in ("parse_products_from_next_data", "parse_concepts_from_next_data",
+                 "extract_next_data"):
+        check(f"PS: 파서에서도 제거됨 ({dead})", not hasattr(pp, dead))
+    # 카테고리 UUID 는 이제 코드에 고정돼 있다 — 비면 할인 수집이 통째로 사라진다
+    from collectors.playstation import CATALOG_CATEGORIES, CONCEPT_CATEGORIES
+    ids = [c[1] for c in CATALOG_CATEGORIES + CONCEPT_CATEGORIES]
+    check(f"PS: 고정 카테고리가 비어 있지 않다 ({len(ids)}개)", len(ids) >= 5)
+    check("PS: 카테고리 ID 중복 없음", len(set(ids)) == len(ids))
+    kinds = {c[2] for c in CATALOG_CATEGORIES + CONCEPT_CATEGORIES}
+    check("PS: new/free/upcoming 이 모두 붙는다", {"new", "free", "upcoming"} <= kinds)
+
+
+def test_ps_empty_grid_is_failure() -> None:
+    """카테고리 첫 페이지가 200 이지만 0건이면 '실패'로 기록해야 한다.
+
+    실측 사고 그대로다: 소니가 목록을 클라이언트 렌더링으로 바꾼 뒤 new/upcoming/free
+    가 매번 0건이었는데, 이게 오류로 남지 않으면 '할인 수집이 통째로 건너뛰어진 실행'과
+    '원래 상품이 없는 카테고리'를 구분할 수 없다. AllDeals 가 0건이면 할인 피드가
+    갱신되지 않으므로 반드시 보여야 한다.
+    """
+    import collectors.playstation as ps
+
+    col = ps.PlaystationCollector.__new__(ps.PlaystationCollector)
+    col.pages_found = 0
+    col.save_raw = lambda *a, **k: 1
+    col.save_item = lambda *a, **k: None
+    errors: list[str] = []
+    col.record_parse_error = lambda url, msg, details=None: errors.append(msg)
+
+    empty = json.dumps({"data": {"categoryGridRetrieve": {
+        "products": [], "concepts": [], "pageInfo": {"totalCount": 0}}}})
+    with patch.object(ps, "fetch", return_value=MagicMock(status_code=200, text=empty)):
+        col._collect_grid("AllDeals", "cat-id", None, set(), [], float("inf"))
+    check("PS: 200/0건 카테고리는 오류로 기록", any("0건" in m for m in errors))
+
+    # GraphQL 이 errors 를 돌려주는 경우(스키마·해시 무효화)도 조용히 넘기면 안 된다
+    errors.clear()
+    bad = json.dumps({"errors": [{"message": "Query not whitelisted"}]})
+    with patch.object(ps, "fetch", return_value=MagicMock(status_code=200, text=bad)):
+        col._collect_grid("AllDeals", "cat-id", None, set(), [], float("inf"))
+    check("PS: GraphQL 오류도 기록", any("GraphQL 오류" in m for m in errors))
+
+    # 정상 응답은 오류를 남기지 않고 저장까지 간다
+    errors.clear()
+    saved: list = []
+    col.save_item = lambda item, raw_id: saved.append(item)
+    ok = json.dumps({"data": {"categoryGridRetrieve": {
+        "products": [{"__typename": "Product", "id": "UP0001-PPSA00001_00-AAAAAAAAAAAAAAAA",
+                      "name": "테스트 게임",
+                      "price": {"basePrice": "10,000원", "discountedPrice": "5,000원",
+                                "discountText": "-50%"},
+                      "localizedStoreDisplayClassification": "제품판",
+                      "media": [{"type": "IMAGE", "role": "MASTER", "url": "https://x/a.png"}]}],
+        "concepts": [], "pageInfo": {"totalCount": 1}}}})
+    with patch.object(ps, "fetch", return_value=MagicMock(status_code=200, text=ok)):
+        col._collect_grid("AllDeals", "cat-id", "upcoming", set(), [], float("inf"))
+    check("PS: 정상 응답은 오류 없음", not errors)
+    check("PS: 정상 응답은 저장된다", len(saved) == 1)
+    check("PS: content_kind 가 붙는다",
+          bool(saved) and saved[0].extracted_data.get("content_kind") == "upcoming")
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
@@ -369,6 +523,9 @@ if __name__ == "__main__":
     test_nintendo_gallery_targets_missing_first()
     test_ps_gallery_fallback_art()
     test_ps_content_type_from_classification()
+    test_ps_concept_price_enrichment()
+    test_ps_html_list_path_is_gone()
+    test_ps_empty_grid_is_failure()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))
