@@ -315,6 +315,49 @@ def test_ps_gallery_fallback_art() -> None:
     check("PS: 이미지가 하나뿐이면 한 장 그대로", g4 == ["http://x/MASTER"])
 
 
+def test_ps_content_type_from_classification() -> None:
+    """PS: 목록 응답의 표시 분류만으로 게임/DLC 를 가른다 (추가 요청 0회).
+
+    실측 사고: DLC 판별을 단품 GraphQL(topCategory)에만 의존해 상한에 걸린
+    대부분이 미판별로 남았다 — 신선한 PS 상품 8,247건 중 content_type 이 붙은 건
+    235건뿐. 그 결과 게임 피드의 61%가 의상·캐릭터·레벨 같은 DLC 였다
+    (전수 8,000건: 게임 3,004 / DLC 4,843 / 분류없음 153).
+    localizedStoreDisplayClassification 은 목록 응답에 이미 들어 있다.
+    """
+    from parsers.playstation import _content_type_from_class, _product_from_node
+
+    for k in ("제품판", "프리미엄 에디션", "게임 번들", "번들"):
+        check(f"PS: '{k}' 는 게임", _content_type_from_class(k) == "game")
+    for k in ("의상", "캐릭터", "레벨", "시즌 패스", "무기", "지도", "추가 콘텐츠 팩",
+              "항목", "추가 콘텐츠", "에피소드", "차량", "가상 통화", "트랙"):
+        check(f"PS: '{k}' 는 DLC", _content_type_from_class(k) == "addon")
+
+    # 모르는 분류는 미판별로 남긴다 — 게임을 잘못 숨기는 쪽이 더 나쁘다
+    check("PS: 처음 보는 분류는 미판별", _content_type_from_class("듣도보도못한분류") is None)
+    check("PS: 분류가 없으면 미판별", _content_type_from_class(None) is None)
+
+    # 노드 → 상품 변환에 실제로 실린다
+    node = {"id": "X1", "name": "의상 팩", "price": {"basePrice": "₩1,000", "discountedPrice": "₩500"},
+            "localizedStoreDisplayClassification": "의상"}
+    item = _product_from_node("Product:X1", node, {})
+    check("PS: 변환 결과에 content_type 이 실린다",
+          item is not None and item.extracted_data.get("content_type") == "addon")
+    check("PS: 표시 분류 원본도 보관",
+          item is not None and item.extracted_data.get("store_classification") == "의상")
+
+    node2 = {"id": "X2", "name": "본편", "price": {"basePrice": "₩1,000"},
+             "localizedStoreDisplayClassification": "제품판"}
+    item2 = _product_from_node("Product:X2", node2, {})
+    check("PS: 제품판은 game 으로 실린다",
+          item2 is not None and item2.extracted_data.get("content_type") == "game")
+
+    # 분류가 없으면 키 자체를 넣지 않는다 (병합이 직전 값을 살릴 수 있게)
+    node3 = {"id": "X3", "name": "분류없음", "price": {"basePrice": "₩1,000"}}
+    item3 = _product_from_node("Product:X3", node3, {})
+    check("PS: 분류 없으면 content_type 키를 안 만든다",
+          item3 is not None and "content_type" not in item3.extracted_data)
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
@@ -325,6 +368,7 @@ if __name__ == "__main__":
     test_steam_composed_header_fallback()
     test_nintendo_gallery_targets_missing_first()
     test_ps_gallery_fallback_art()
+    test_ps_content_type_from_classification()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))

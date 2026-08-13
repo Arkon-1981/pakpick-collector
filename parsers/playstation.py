@@ -169,6 +169,37 @@ def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
     return representative, gallery
 
 
+# 소니의 상품 표시 분류(localizedStoreDisplayClassification) → 게임 / DLC.
+# ⚠️ 이 값은 **목록(grid) 응답에 이미 들어 있다**. 예전엔 DLC 판별을 단품 GraphQL
+# (topCategory)에만 의존해서 상한(PS_RELEASE_META_MAX)에 걸린 대부분이 미판별로
+# 남았다 — 실측: 신선한 PS 상품 8,247건 중 content_type 이 붙은 건 235건뿐이었고,
+# 그 결과 게임 피드의 61%가 의상·캐릭터·레벨 같은 DLC 였다(전수 8,000건 집계).
+#
+# 새 분류가 나타나면 어느 쪽에도 안 넣고 미판별로 남긴다 — 게임을 잘못 숨기는 쪽이
+# DLC 가 섞이는 것보다 나쁘다는 이 프로젝트의 기존 방침을 따른다(로그로 알린다).
+_PS_GAME_CLASSES = frozenset({"제품판", "프리미엄 에디션", "게임 번들", "번들"})
+_PS_ADDON_CLASSES = frozenset({
+    "의상", "추가 콘텐츠 팩", "캐릭터", "레벨", "지도", "시즌 패스", "무기",
+    "항목", "추가 콘텐츠", "에피소드", "차량", "가상 통화", "트랙",
+})
+_seen_unknown_class: set[str] = set()
+
+
+def _content_type_from_class(klass: str | None) -> str | None:
+    """표시 분류로 게임/DLC 를 가른다. 모르는 값이면 None(미판별)."""
+    if not klass:
+        return None
+    if klass in _PS_GAME_CLASSES:
+        return "game"
+    if klass in _PS_ADDON_CLASSES:
+        return "addon"
+    if klass not in _seen_unknown_class:
+        _seen_unknown_class.add(klass)
+        logger.warning(
+            "PS 처음 보는 상품 분류: %r — 게임/DLC 판별 목록에 넣을지 확인 필요", klass)
+    return None
+
+
 def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
     """apolloState의 Product 노드 1개를 ParsedItem으로 변환한다."""
     product_id = node.get("id") or key.split(":", 1)[-1]
@@ -210,6 +241,15 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
         "price_raw": price_node,
         "gallery": gallery,
     }
+
+    # 게임인지 DLC 인지 — 목록 응답의 표시 분류만으로 판별한다(추가 요청 0회).
+    # 단품 GraphQL(parse_product_meta)이 나중에 topCategory 로 덮어쓰면 그쪽이 우선이다.
+    klass = node.get("localizedStoreDisplayClassification")
+    if klass:
+        extracted["store_classification"] = klass
+    ctype = _content_type_from_class(klass)
+    if ctype:
+        extracted["content_type"] = ctype
 
     return ParsedItem(
         store_product_id=product_id,
