@@ -1,10 +1,12 @@
 """플레이스테이션 스토어 파서.
 
-PS 스토어 페이지의 <script id="__NEXT_DATA__"> 안 JSON에서 상품을 추출한다.
+상품은 공개 GraphQL `categoryGridRetrieve` 응답에서 읽는다.
 
-JSON 구조 (핵심 부분):
-  props.apolloState  안에  "Product:UP0001-PPSA12345_00-XXXX" 형태의 키로
-  상품 객체가 들어 있고, 각 객체에 name, price, media 등이 있다.
+⚠️ 2026-08-11 이전에는 페이지 HTML 의 <script id="__NEXT_DATA__"> 안 apolloState 에서
+읽었다. 소니가 목록을 클라이언트 렌더링으로 바꿔 그 JSON 에서 상품이 사라졌고
+(apolloState 에 내비게이션 5개만 남았다) 수집이 8회 연속 실패했다. HTML 목록 파서는
+0건을 돌려주는 죽은 경로라 지웠다 — 폴백으로 남기면 고장을 조용한 부분 수집으로
+감춘다. 상세 페이지의 할인 종료시각만 정규식으로 읽는 예비 경로가 남아 있다.
 
 price 객체 예시:
   {
@@ -15,15 +17,10 @@ price 객체 예시:
     "isFree": false, "isExclusive": false, ...
   }
 
-⚠️ 구조가 바뀔 수 있으므로 apolloState에서 못 찾으면
-JSON 전체를 재귀 탐색하는 예비 로직도 갖춰 두었다.
-원본 HTML은 항상 저장되므로 파서 수정 후 재처리 가능.
+원본 응답은 항상 저장되므로 파서 수정 후 재처리 가능.
 """
-import json
 import re
 from datetime import datetime, timezone
-
-from bs4 import BeautifulSoup
 
 from collectors.base import ParsedItem
 from common.logging_util import get_logger
@@ -31,19 +28,6 @@ from common.logging_util import get_logger
 logger = get_logger(__name__)
 
 PRICE_NUM_RE = re.compile(r"[\d,]+")
-
-
-def extract_next_data(html: str) -> dict | None:
-    """HTML에서 __NEXT_DATA__ JSON을 꺼낸다."""
-    soup = BeautifulSoup(html, "lxml")
-    tag = soup.find("script", id="__NEXT_DATA__")
-    if tag is None or not tag.string:
-        return None
-    try:
-        return json.loads(tag.string)
-    except json.JSONDecodeError:
-        logger.warning("__NEXT_DATA__ JSON 파싱 실패")
-        return None
 
 
 def _parse_krw(text: str | None) -> float | None:
@@ -169,6 +153,37 @@ def _images_from_media(media, apollo: dict) -> tuple[str | None, list[str]]:
     return representative, gallery
 
 
+# 소니의 상품 표시 분류(localizedStoreDisplayClassification) → 게임 / DLC.
+# ⚠️ 이 값은 **목록(grid) 응답에 이미 들어 있다**. 예전엔 DLC 판별을 단품 GraphQL
+# (topCategory)에만 의존해서 상한(PS_RELEASE_META_MAX)에 걸린 대부분이 미판별로
+# 남았다 — 실측: 신선한 PS 상품 8,247건 중 content_type 이 붙은 건 235건뿐이었고,
+# 그 결과 게임 피드의 61%가 의상·캐릭터·레벨 같은 DLC 였다(전수 8,000건 집계).
+#
+# 새 분류가 나타나면 어느 쪽에도 안 넣고 미판별로 남긴다 — 게임을 잘못 숨기는 쪽이
+# DLC 가 섞이는 것보다 나쁘다는 이 프로젝트의 기존 방침을 따른다(로그로 알린다).
+_PS_GAME_CLASSES = frozenset({"제품판", "프리미엄 에디션", "게임 번들", "번들"})
+_PS_ADDON_CLASSES = frozenset({
+    "의상", "추가 콘텐츠 팩", "캐릭터", "레벨", "지도", "시즌 패스", "무기",
+    "항목", "추가 콘텐츠", "에피소드", "차량", "가상 통화", "트랙", "티켓",
+})
+_seen_unknown_class: set[str] = set()
+
+
+def _content_type_from_class(klass: str | None) -> str | None:
+    """표시 분류로 게임/DLC 를 가른다. 모르는 값이면 None(미판별)."""
+    if not klass:
+        return None
+    if klass in _PS_GAME_CLASSES:
+        return "game"
+    if klass in _PS_ADDON_CLASSES:
+        return "addon"
+    if klass not in _seen_unknown_class:
+        _seen_unknown_class.add(klass)
+        logger.warning(
+            "PS 처음 보는 상품 분류: %r — 게임/DLC 판별 목록에 넣을지 확인 필요", klass)
+    return None
+
+
 def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
     """apolloState의 Product 노드 1개를 ParsedItem으로 변환한다."""
     product_id = node.get("id") or key.split(":", 1)[-1]
@@ -211,6 +226,15 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
         "gallery": gallery,
     }
 
+    # 게임인지 DLC 인지 — 목록 응답의 표시 분류만으로 판별한다(추가 요청 0회).
+    # 단품 GraphQL(parse_product_meta)이 나중에 topCategory 로 덮어쓰면 그쪽이 우선이다.
+    klass = node.get("localizedStoreDisplayClassification")
+    if klass:
+        extracted["store_classification"] = klass
+    ctype = _content_type_from_class(klass)
+    if ctype:
+        extracted["content_type"] = ctype
+
     return ParsedItem(
         store_product_id=product_id,
         title=title,
@@ -224,90 +248,6 @@ def _product_from_node(key: str, node: dict, apollo: dict) -> ParsedItem | None:
         is_on_sale=is_on_sale,
         extracted_data=extracted,
     )
-
-
-def parse_concepts_from_next_data(next_data: dict) -> list[ParsedItem]:
-    """apolloState의 Concept 노드에서 상품을 뽑는다.
-
-    '신규 발매' 같은 일부 카테고리는 Product 노드가 껍데기({__typename,id})이고
-    실제 이름·가격·이미지는 게임 단위 엔티티인 Concept 노드에 들어 있다.
-    Concept.products[0].__ref 가 실제 Product ID를 가리키므로, 그 ID로 맞춰
-    기존 상품과 같은 식별자 체계를 유지한다.
-    """
-    apollo = (next_data.get("props") or {}).get("apolloState") or {}
-    items: list[ParsedItem] = []
-    for key, node in apollo.items():
-        if not isinstance(node, dict):
-            continue
-        if not (key.startswith("Concept:") or node.get("__typename") == "Concept"):
-            continue
-        try:
-            refs = node.get("products") or []
-            ref = refs[0].get("__ref") if refs and isinstance(refs[0], dict) else None
-            if not ref:
-                continue
-            # "Product:JP0101-PPSA34474_00-PROBBSPIRITS2026:ko-kr" → 가운데 ID만
-            parts = ref.split(":")
-            product_id = parts[1] if len(parts) >= 2 else None
-            if not product_id:
-                continue
-            item = _product_from_node(ref, {**node, "id": product_id}, apollo)
-            if item and item.title:
-                items.append(item)
-        except Exception:
-            logger.exception("PS Concept 노드 파싱 실패: %s", key)
-    return items
-
-
-def parse_products_from_next_data(next_data: dict) -> list[ParsedItem]:
-    items: list[ParsedItem] = []
-
-    apollo = (next_data.get("props") or {}).get("apolloState") or {}
-    if apollo:
-        for key, node in apollo.items():
-            if not isinstance(node, dict):
-                continue
-            if key.startswith("Product:") or node.get("__typename") == "Product":
-                # 껍데기 참조 노드({__typename,id}만 있는 것)는 건너뛴다.
-                # 이런 카테고리는 실제 데이터가 Concept 노드에 있다.
-                if node.get("name") is None and node.get("price") is None:
-                    continue
-                try:
-                    item = _product_from_node(key, node, apollo)
-                    if item:
-                        items.append(item)
-                except Exception:
-                    logger.exception("PS 상품 노드 파싱 실패: %s", key)
-
-    if items:
-        return items
-
-    # 예비: apolloState가 없거나 비었으면 JSON 전체를 재귀 탐색
-    logger.warning("apolloState에서 상품을 못 찾음 — 전체 JSON 재귀 탐색 시도")
-    found: list[ParsedItem] = []
-
-    def walk(obj):
-        if isinstance(obj, dict):
-            if (
-                obj.get("__typename") == "Product"
-                and obj.get("id")
-                # 껍데기 참조 노드는 제외 (실제 데이터는 Concept 노드에 있음)
-                and not (obj.get("name") is None and obj.get("price") is None)
-            ):
-                try:
-                    item = _product_from_node(f"Product:{obj['id']}", obj, {})
-                    if item:
-                        found.append(item)
-                except Exception:
-                    pass
-            for v in obj.values():
-                walk(v)
-        elif isinstance(obj, list):
-            for v in obj:
-                walk(v)
-
-    walk(next_data)
-    return found
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +269,35 @@ def parse_products_from_graphql(data: dict) -> list[ParsedItem]:
                 items.append(item)
         except Exception:
             logger.exception("PS GraphQL 상품 파싱 실패: %s", p.get("id"))
+    return items
+
+
+def parse_concepts_from_graphql(data: dict) -> list[ParsedItem]:
+    """grid 응답의 concepts 에서 상품을 뽑는다.
+
+    일부 카테고리는 products 가 아니라 concepts 로만 응답한다 (실측 2026-08-13 ko-kr:
+    '신규 발매' 134건·'무료 게임' 148건이 전부 concepts). Concept 은 게임 단위 엔티티라
+    products[0].id 가 실제 상품 ID다.
+
+    ⚠️ concepts 노드에는 price 가 실려 오지 않는다(실측). 따라서 여기서 만든 항목은
+    가격이 비어 있고, 수집기가 단품 오퍼레이션으로 채운다
+    (PlaystationCollector._enrich_concept_prices).
+    """
+    grid = ((data.get("data") or {}).get("categoryGridRetrieve")) or {}
+    items: list[ParsedItem] = []
+    for c in grid.get("concepts") or []:
+        if not isinstance(c, dict):
+            continue
+        products = c.get("products") or []
+        pid = products[0].get("id") if products and isinstance(products[0], dict) else None
+        if not pid:
+            continue
+        try:
+            item = _product_from_node(f"Product:{pid}", {**c, "id": pid}, {})
+            if item and item.title:
+                items.append(item)
+        except Exception:
+            logger.exception("PS GraphQL Concept 파싱 실패: %s", c.get("id"))
     return items
 
 

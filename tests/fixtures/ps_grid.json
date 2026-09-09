@@ -1,0 +1,4180 @@
+{
+ "data": {
+  "categoryGridRetrieve": {
+   "__typename": "CategoryGrid",
+   "concepts": null,
+   "facetOptions": [
+    {
+     "__typename": "CategoryFacet",
+     "displayName": "유형",
+     "name": "storeDisplayClassification",
+     "values": [
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 1469,
+       "displayName": "제품판",
+       "key": "FULL_GAME"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 166,
+       "displayName": "게임 번들",
+       "key": "GAME_BUNDLE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 121,
+       "displayName": "프리미엄 에디션",
+       "key": "PREMIUM_EDITION"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 110,
+       "displayName": "추가 콘텐츠",
+       "key": "OTHER"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 82,
+       "displayName": "의상",
+       "key": "COSTUME"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 76,
+       "displayName": "레벨",
+       "key": "LEVEL"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 61,
+       "displayName": "추가 콘텐츠 팩",
+       "key": "ADD-ON_PACK"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 52,
+       "displayName": "캐릭터",
+       "key": "CHARACTER"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 44,
+       "displayName": "항목",
+       "key": "ITEM"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 21,
+       "displayName": "에피소드",
+       "key": "EPISODE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 18,
+       "displayName": "지도",
+       "key": "MAP"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 14,
+       "displayName": "시즌 패스",
+       "key": "SEASON_PASS"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 13,
+       "displayName": "가상 통화",
+       "key": "VIRTUAL_CURRENCY"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 6,
+       "displayName": "차량",
+       "key": "VEHICLE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 3,
+       "displayName": "무기",
+       "key": "WEAPONS"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 2,
+       "displayName": "번들",
+       "key": "BUNDLE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 1,
+       "displayName": "티켓",
+       "key": "TICKET"
+      }
+     ]
+    },
+    {
+     "__typename": "CategoryFacet",
+     "displayName": "가격",
+     "name": "webBasePrice",
+     "values": [
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 835,
+       "displayName": "4,999원 이하",
+       "key": "1-4999"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 583,
+       "displayName": "5,000 - 9,999원",
+       "key": "5000-9999"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 495,
+       "displayName": "10,000 - 19,999원",
+       "key": "10000-19999"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 218,
+       "displayName": "20,000 - 49,999원",
+       "key": "20000-49999"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 33,
+       "displayName": "50,000원 이상",
+       "key": "50000-*"
+      }
+     ]
+    },
+    {
+     "__typename": "CategoryFacet",
+     "displayName": "장르",
+     "name": "productGenres",
+     "values": [
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 783,
+       "displayName": "액션",
+       "key": "ACTION"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 538,
+       "displayName": "어드벤처",
+       "key": "ADVENTURE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 269,
+       "displayName": "캐주얼",
+       "key": "CASUAL"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 261,
+       "displayName": "퍼즐",
+       "key": "PUZZLE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 248,
+       "displayName": "시뮬레이션",
+       "key": "SIMULATION"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 245,
+       "displayName": "슈팅",
+       "key": "SHOOTER"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 242,
+       "displayName": "롤플레잉 게임",
+       "key": "ROLE_PLAYING_GAMES"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 241,
+       "displayName": "아케이드",
+       "key": "ARCADE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 186,
+       "displayName": "전략",
+       "key": "STRATEGY"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 120,
+       "displayName": "공포",
+       "key": "HORROR"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 112,
+       "displayName": "가족",
+       "key": "FAMILY"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 108,
+       "displayName": "드라이빙/레이싱",
+       "key": "RACING"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 104,
+       "displayName": "유니크",
+       "key": "UNIQUE"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 66,
+       "displayName": "스포츠",
+       "key": "SPORTS"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 59,
+       "displayName": "시뮬레이터",
+       "key": "SIMULATOR"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 54,
+       "displayName": "격투",
+       "key": "FIGHTING"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 38,
+       "displayName": "성인",
+       "key": "ADULT"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 31,
+       "displayName": "파티",
+       "key": "PARTY"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 26,
+       "displayName": "음악/리듬",
+       "key": "MUSIC/RHYTHM"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 24,
+       "displayName": "두뇌개발",
+       "key": "BRAIN_TRAINING"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 12,
+       "displayName": "교육",
+       "key": "EDUCATIONAL"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 7,
+       "displayName": "피트니스",
+       "key": "FITNESS"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 7,
+       "displayName": "퀴즈",
+       "key": "QUIZ"
+      }
+     ]
+    },
+    {
+     "__typename": "CategoryFacet",
+     "displayName": "플랫폼",
+     "name": "targetPlatforms",
+     "values": [
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 1345,
+       "displayName": "PS5",
+       "key": "PS5"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 1302,
+       "displayName": "PS4",
+       "key": "PS4"
+      }
+     ]
+    },
+    {
+     "__typename": "CategoryFacet",
+     "displayName": "발매일",
+     "name": "productReleaseDate",
+     "values": [
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 31,
+       "displayName": "방금 출시",
+       "key": "last_thirty_days"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 4,
+       "displayName": "곧 제공 예정",
+       "key": "next_thirty_days"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 11,
+       "displayName": "모든 예약주문",
+       "key": "future_release_date"
+      }
+     ]
+    },
+    {
+     "__typename": "CategoryFacet",
+     "displayName": "VR",
+     "name": "productVrCompatibility",
+     "values": [
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 98,
+       "displayName": "PS VR2",
+       "key": "PSVR2"
+      },
+      {
+       "__typename": "CategoryFacetValue",
+       "count": 24,
+       "displayName": "PS VR",
+       "key": "PSVR"
+      }
+     ]
+    }
+   ],
+   "id": "3f772501-f6f8-49b7-abac-874a88ca4897",
+   "localizedName": "cat.gma.AllDeals",
+   "pageInfo": {
+    "__typename": "PageInfo",
+    "isLast": false,
+    "offset": 0,
+    "size": 30,
+    "totalCount": 2259
+   },
+   "products": [
+    {
+     "__typename": "Product",
+     "id": "HP6545-PPSA23226_00-GAME000000000000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/3d55921e9371790074aba55df244ac2c448600d9c055e538.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/90ca671563af20a78a9bacfbd9a8eaed7a4bd2cd985753e2.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/bfcb6c74330e971aa8946714bf0818240007cf42a09c078b.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/a65daf887eee88a1d386373aebf90edf995a572fb177af19.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2120/5fd2d705e3b53619bcac56f6ed7837e4605f1457824da2a4.jpeg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/d5dbd0468316c72143b414472011a10dc4ea24c2b5de6ae0.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/98954d14c0d9c88ef33f74d4734ab5da03fab034ae37fcd1.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1420/b5d3460b8d3c8221e93ceaa641adaa5046e6101196550b32.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/59be402814be4dbf2ba860689f76895fc81510e615c925bd.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/7c266515f0ccb240233ec44dcfa71f4c2c913993d2e6f452.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/b9211ae73d799e018b9a8431491a004fa66eb180c43e0e41.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/eb0546353e816b6e95a52319057d5b1da901055e95e1dd53.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/a1dbdd528e7707c32febbaab1eb158f582dff364a4163fdb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/69040064be43c67daf7cc8b9546fc857ee1a6be44714246c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/b3b2c35883d4e886158adca4664b228779290ea39b165f6e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/be6332f7aaa5339346fd3ae53b250951d718372b096dcaae.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/bd406f42e9352fdb398efcf21a4ffe575b2306ac40089d21.png"
+      }
+     ],
+     "name": "검은 신화: 오공 (중국어(간체자), 한국어, 태국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA23226_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "64,800원",
+      "discountText": "-30%",
+      "discountedPrice": "45,360원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "디럭스"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      },
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP6545-PPSA23226_00-GAMEDELUXE000000",
+     "localizedStoreDisplayClassification": "프리미엄 에디션",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/3d55921e9371790074aba55df244ac2c448600d9c055e538.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/90ca671563af20a78a9bacfbd9a8eaed7a4bd2cd985753e2.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/bfcb6c74330e971aa8946714bf0818240007cf42a09c078b.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/1507/a65daf887eee88a1d386373aebf90edf995a572fb177af19.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2122/1783cac687222bfa6dc6a657bd76ffddf579f666cd97f06d.jpeg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2122/3a6864f096ba0b1f5c23dc8b7e95ef31895cde4057c815f3.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2120/5f6a2d004d66d880a5b1ee034de46436959cedbd03f9221c.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1508/58012f12b5657c8667eb25ae21d9a7a5862a279b4132698e.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2122/d1589d9c52c39f8833827fc2f5cf5b3b5c0b32f7b3c3dc84.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2317/7e426ced7f2d6c4d847a321f6a9c43ffad8b7e22a012554f.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/7c266515f0ccb240233ec44dcfa71f4c2c913993d2e6f452.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/b9211ae73d799e018b9a8431491a004fa66eb180c43e0e41.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/eb0546353e816b6e95a52319057d5b1da901055e95e1dd53.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/a1dbdd528e7707c32febbaab1eb158f582dff364a4163fdb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/69040064be43c67daf7cc8b9546fc857ee1a6be44714246c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/b3b2c35883d4e886158adca4664b228779290ea39b165f6e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2117/be6332f7aaa5339346fd3ae53b250951d718372b096dcaae.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/2122/ad4d47615db6f1b46b94cdb9002537abf26a14a6e240bc55.png"
+      }
+     ],
+     "name": "검은 신화: 오공 디지털 디럭스 에디션 (중국어(간체자), 한국어, 태국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA23226_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "77,800원",
+      "discountText": "-30%",
+      "discountedPrice": "54,460원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "UP0002-PPSA02442_00-DIVLOHCOMBO00000",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202604/2723/f9abba816a8e68591141808521dbcc1a53eeeb53371c804a.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202606/0900/daf8df8296837157a19c2b5212ab0575951596c64fc44496.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202606/0900/5259cf38fa1b926916092e98d6fc2fab8534b984d869c561.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202411/0417/bb0f33b5376c4e6370114e3c8d4d87569109edd4dc41bb78.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202410/0722/1c17178ac6c3b0950a5e223d172202152e12ddd705112e5d.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/f93c9e2525a76cde082e9f7e75716d575261fbdd7f9f9bf7.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/f5873b355e96856a5498827d80fe99902f3f029aae1c8e10.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/25f84ba55eee2bcd0105a8bf430f0df76b1bf4e0c78ce0b3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1222/8865fe5879c04892571c45bc9fb07539fa867d94855b191c.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/45c1b6c9514e91fce2b23cef1a5f0ebad37e04d7c306f8af.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/53a1a73d17599b4d663d5d535a58d7b6f85620952115add3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1201/0c801bd4169720fb20e9f973d4fd6f799a680cc4869e8fc5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1201/0dca4fedbbbf89d0068c8a781b01f7ab473737b7c55326ec.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1201/6c45505b4814f6e38a18e6bf0e348042cbaddc8557b2f6a6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1201/61b351a5ae870553a440041557feea1d54cb1c989c1b7151.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1201/1fe3382b5462038bb369cd633223ae3d2a7e9db0aa5a4bbb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/9a3d9b1335ffbc631b2740892af80831b7f8b2880cde080a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1300/49b37083e3fa90f7084899ecad4f08a154432b7c634fd776.png"
+      }
+     ],
+     "name": "디아블로® IV: 증오의 시대 컬렉션 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA02442_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "77,900원",
+      "discountText": "-25%",
+      "discountedPrice": "58,425원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP4389-PPSA23372_00-ANIMALGAMEGLOBAL",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202602/1314/81ee4e76df4ce21d9f57d6ddcdbe90b4f43a4e53f6594cff.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202408/2019/ddbc826a3d9d55d1dbcf62016f11403457076a16740378a7.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2109/94316dd1b1a7799541381b9e46cfc3d40dfe8c626fd721ee.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2109/d66613ed7e0365f52ade046b7b929caa06a48cf2a628cd54.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/2010/ce90cf7764ed76b69afcca59114addab4078dcfdf251a86d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/2010/ad79733a4addc34d9122c077b7782a55de4ede59ade470da.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2109/0d89c4f047a3ae8e950314ed2485ebf22a2fa0a32d4c6ea0.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/2010/3d02d3ec10d248f4dc6c1cc5bd9327008d1a4071270bda62.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/ca5913bd394e560acf4e8f9dc8e98a0df31b07278ade9e3f.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/10711f0d414675f3921660125d748ad4992b2280b2dc11b1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/ca5b664f40450a28fbc3a38549206fca5ea3a8969d6a4ad5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/a0fda8758557d2e394303046dac77f4bc5442389693921b5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/01baa9cf93820c1b978261a27607f52cb8b6b9788f6eeab4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/39ffd5d8af35e01c8076e3f2eecb3b2547cd421015b3b972.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/5654035860c393b0f50157c447d9af2f47e07a97a8e6ad29.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/59433cdc601fec6337264a00ada7567de05c497d10f072e5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/e97db515f176b3a302b6aca96174307f075ed589b6381724.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202601/2110/63bc6e7a47ee2c8898ea859a49f1c8be1b8d89f9948c1bbf.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2109/25422d8bda53b48e35f690b9d68590ab3f5eb4df8755c84f.png"
+      }
+     ],
+     "name": "REANIMAL (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA23372_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "49,700원",
+      "discountText": "-20%",
+      "discountedPrice": "39,760원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "5% 추가 할인"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      },
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP5846-PPSA30117_00-EDSORANOKISEKI01",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202508/0809/6cb60ef89f1d9df9c40de0744303a6145c8724718c6a847e.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202508/2102/0a54be4ce8ff05a07c00e83df51e4c9bba9d20eeab671528.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2210/86653132b2a16c58b32d8756e03fd41433ff141edc9f7c90.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1711/26fe323e4439ac10e1902f93d0ffa5a3c102f8830ea7c177.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1711/1190bc1e11ee9a0836600bc09a92c46a2eaad93563498056.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1711/5978e2713e6deb65dec8ad1e7db1565407931345b7437701.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1711/0190c0dc9e683bcac20413d3b8387791342b253f96c02c99.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1707/25b7b653031d677aa51c4506b8eb6c0971695ec007fc3a54.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1707/a416ab381f45f4dc981634f548d3492881f9fd83633ccfcb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1707/eb81ac8a48c0f4df79515fd0f356f29c976aca29042512c7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2402/f3b6dd67b62a3187537c93fcb9752486ff61b6e6c454f6a6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2402/a2e3779a6cc3b1ec72c9399b4dba8807eb6da4a93104609a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1707/c931d44d464736dcb4a3dfd48964f66738d1dbde8321dc53.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1707/1dabefe138990dbeda2ed5fb495e52339a674ea4ffbff30c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1707/5113b64c074eb2785dcca03a3ce3a499e2f24b3dbdeb3989.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2402/4b54eca7b459984fd6ffd286258e2dbd751c24ba01e46d64.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2402/469d245aff6bbd89676753d465d03d18ef72cf7b37fb977c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1711/069a15290892c4a24e4239012454824bd79e70eac66768c0.png"
+      }
+     ],
+     "name": "하늘의 궤적 the 1st (중국어(간체자), 한국어, 중국어(번체자))",
+     "npTitleId": "PPSA30117_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "85,900원",
+      "discountText": "-50%",
+      "discountedPrice": "42,950원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0002-PPSA02053_00-CODCWTHEGAME0001",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202012/2405/QvT4KVg39SJp1ylqNEWsrRB6.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202011/1801/JbDZRXYVRQCwJerTQ6PQroJM.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202008/1906/teF2UevMiIEuIfZkDfIBacze.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202104/2722/TNw3NZ9ueqX31iUWUP7qzcYJ.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202104/2722/7bVieySId8mO3GUEkbwesKuX.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202011/1200/QsgOeKSwiREmIfS63uLks5kT.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202107/1623/C9IR52RhVU5InQQmmVKBFzNR.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202104/2722/FIT4lg0bhfbmm94O1INacbn2.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/7UbDf7ntcMivI1pviQuJ4CEy.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/Q1F9mpGjDA25YPDZkV9zFolH.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/NHwhNlbmtIkxzfN1ki5iGLLZ.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/UT2cBjkf1EZyg5pw6KKrlZEi.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/34G4aH9n5qgCEcT9wz2AJHMB.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/5rdh5C3wLDAk1qVNVLVDt97a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/BGVeZjdjoOYZ6mncIfgNa3Wl.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/TC77u550YnhipMNmOEwQp7QQ.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/NnQpQDl8EZVA4pmDq9U52j9P.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202010/0105/OFqUnIXLkyuLXH9ny4QTzi7t.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202111/2000/7nu4skwEitszViqkSM0c4Jp1.png"
+      }
+     ],
+     "name": "콜 오브 듀티®: 블랙 옵스 콜드 워 - 세대 호환 번들 PS4™ & PS5® (중국어(간체자), 한국어, 영어, 중국어(번체자))",
+     "npTitleId": "PPSA02053_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "87,500원",
+      "discountText": "-72%",
+      "discountedPrice": "24,500원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP0006-PPSA23566_00-ULTIMATEEDITION0",
+     "localizedStoreDisplayClassification": "프리미엄 에디션",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202605/0715/ac97acd70ef4b901fded0d33963d8dc20d59a49a6a605fef.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/81db441b33f4eb531856d35ec5269426005d843d0a56994f.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/584d60763b88902e453e39c0d640ec951b627f1a1d214a91.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/3d6bfff196e10a82255dd616698ac9e6c0233783e8e1e034.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/316cf9cfe9ddd6a1e544820245b5d43118fe7294bcdb013f.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/694db90dd52e8217f19cd276e924bc5dc80bc63bc59a9824.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/062d04994b5e270962724a172a640b122b0d4049c8471d05.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202605/0714/ea04bf1a4898cee0e7339631de800042e1c63c8dba49a4f3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202605/0714/302bcb2d5644097e4f61f76b14e2f20b27a3a13c984bc79e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202605/0714/14849e05683a8c47c9abc51d852764cbd7f989ecf3eb42d5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202605/0714/4b3ae302998b66260b8f6289da6a0ea4613ef9eb8282f701.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202605/0714/c6dd209449c148741b8c92d1d0d1acf45c1c50c0d26baf91.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/600bbeeebd794db590d05f2a51a535a5edfcc26104d001a2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202604/2217/981396baf68ab59a8d000a6bdfdd1bd7891e06332bc16d36.png"
+      }
+     ],
+     "name": "UFC™ 6 Ultimate Edition (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA23566_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "116,000원",
+      "discountText": "-15%",
+      "discountedPrice": "98,600원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP9000-PPSA05686_00-UNCHARTED4R00000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202202/0221/IS68pZKjvUDS3xmYhbr0xk1O.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202112/2403/IH7NaNPFZe9bwNfeSO9a2o6O.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/6QIy1SvmHMeG1Gj1uwAIh9mD.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/LV4sc4ZqMoHqZK2ClCd7sfZt.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/N2sERRIDnCUIAplQlUYZKKFg.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/n6K0H4yNVBW9nwwykGb2Qymr.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/rJiTOlaqhVJ86Ix1uQSzsTpO.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/YZUN6kSpNxf2w4ctTGwl3UHw.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/Ta807nPySbwuYgWk5XDFEgDy.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/bcWMApRoSxqOthLr1GEftNya.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/SHYyyHBgb0ZnFZNrGutlrzJp.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/YzYAHfg232taFVsabGMxLJ4E.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/07ZQFfxJFfE1vkmOc2qPVpmU.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/pgtG5vIugUKhjlCP1fgMwKbB.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/9CvbRlePWpByLit7DJoZ2ukW.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/l3FiiXumavyCmX3puXjGVHV0.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202111/2000/99ZoithzyuODz2Msa0FqvTGC.png"
+      }
+     ],
+     "name": "UNCHARTED: 레거시 오브 시브즈 컬렉션 (중국어(간체자), 한국어, 영어, 중국어(번체자))",
+     "npTitleId": "PPSA05686_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "58,800원",
+      "discountText": "-60%",
+      "discountedPrice": "23,520원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "스페셜"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      },
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP5846-PPSA08862_00-00000000000000DX",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202209/2405/LeJHTnc9CN8xE7oSnBmwGx3p.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0801/xGn7NsaQze4fCRqZXVP5N9p1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0801/3frdggX4HZgrBZMn1ZXK7WpU.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202209/1008/bBOdQDeDkrKM86mXvRVusFm7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0801/kmAewV7Rr41QzBlcVf4vLrcE.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0801/ecjMR75PFGGQ0ymP133IO1t6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0112/NvUMWDs6xVFAMgvjdBRBwJcc.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0112/ydqVMR2nLkQ4WaSW5FhdoMRR.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0112/6rxBaCPXNvYyTs6T5Yvjozyd.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0112/K45aaMZJKo1AKy4U6PwlpZh4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0112/PLLh71FK9fh4hTtKHlaeQlOn.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0112/dWy1rbTKhHfmEL3TLT3xp6TG.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202210/0801/557pG7su8FUbEpOmEnHyM4sh.png"
+      }
+     ],
+     "name": "사무라이 메이든 ~SAMURAI MAIDEN~ 디럭스 에디션 (PS4 & PS5) (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA08862_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "99,000원",
+      "discountText": "-90%",
+      "discountedPrice": "9,900원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP4064-CUSA10870_00-ASIA000000000000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP4064/CUSA10870_00/UCgPJtfMwVFPbdJHjYHJcEbKmeZmtNEy.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202009/3008/gN7NTxgZDn7n8P2nq8fNZyCT.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202011/0203/8L4cc3lvcAY2OzfnIeLudEe9.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP4064/CUSA10870_00/FREE_CONTENTkhZ8AevUEeDvXheUVAAi/13.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP4064/CUSA10870_00/FREE_CONTENT2RHJt9dswMbUYiJJ0sfl/14.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP4064/CUSA10870_00/FREE_CONTENTw4tlyyIt1yyn9UrqJs6E/15.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP4064/CUSA10870_00/xWWemobK1Xc5DLDDWaeHgQPX4qUlNjYKEBVfjXfEwb3sIvR5aMNaFfJo9tfvhVDY.png"
+      }
+     ],
+     "name": "Overcooked! 2 (중국어(간체자), 한국어, 영어, 일본어)",
+     "npTitleId": "CUSA10870_00",
+     "platforms": [
+      "PS4"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "29,600원",
+      "discountText": "-75%",
+      "discountedPrice": "7,400원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "UP0002-PPSA02442_00-DIVBASEGAME00000",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202606/3018/818a0120d512f900b60ef3bd9b6bd11387a2cb9e05072400.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202406/0601/22b4de46e6dd530818b34264af62abb21d33d6c0a55f105e.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/3123/218ac4e34bf15f7cdfa24f7e452cadf2ebb378c765d242fe.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/3123/4168ef9b8695981a2e53f4a548319c27a32e320535a938ec.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202412/1822/b528f6f7984201f2f466970005cc13a562ca36dcb8780745.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202405/3123/21a60345b63762324e97658fce8d3c1fa35dfc3dd9555629.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2523/bd924f75f44236aaf7450d9292ff161384510e69db03c72c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2523/4c052c1aed904523c37dbb8f24b8819d2408a39302e0abdb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2523/b3d96b7872be23435b555fd61ef26401e59da83f95211073.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2523/ec0d1f35077842639eb1d8c74a62a7f7bd9459eef2ade8e6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2523/71465576c92729a77020b3f126855dde990109f4b14ba35e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202211/3017/Oo1B84A7BLCT157YFSxjtwG0.png"
+      }
+     ],
+     "name": "디아블로® IV - 일반판 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA02442_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "62,400원",
+      "discountText": "-40%",
+      "discountedPrice": "37,440원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0700-PPSA25217_00-SPWYULTEDITION00",
+     "localizedStoreDisplayClassification": "프리미엄 에디션",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0409/737d0da314bc39ebeed0a0d6039bf4b806cc9509d42faf38.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0409/ce3572c76dda84a9803bb70388323f1d743df1d79b7f838d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0308/588154abbf2a40fdae9f2915b7a4588902806fc3f9a0abc0.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0409/3c8fda8f174d877a81cd8deca4bdd19ef8585ee76d8be200.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0409/6e038d9c62a62da31a53cb49709a4893343906256b794908.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/5cdbd5782e88e8e58ed3ac851b78ed1823ecb1f491c34c40.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/5fce8c0298b1c16c6b8f4be5dee7fd3faa59be6eac72f87b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/940c08b9e3fc0e3ace1aff756ea83d96a0c9b29a8e360f85.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/09e13eece0234133200ce1d7a9d19fe1eb2a7d990298f6e9.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/40b9d71375abca506467ac2f39ae688aea15363bdab3c4a4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/c4834f22a6d5ba052f1be8490c81e27f8ea683c107d474d1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/9f6ec2ca073e948bc9120a3bada1e5af52df726065bbdae1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/3b86b07668c65e24bc85b93a378238abdb1d21bf09dfbf84.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0405/d7af3ad9a5e072f340c33bd9f75011e8139661e057ad1e6e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0409/a53dd03bc1928cd40ee4776a65f6d4fb244dee465d86ff95.png"
+      }
+     ],
+     "name": "슈퍼로봇대전 Y 디지털 얼티밋 에디션 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA25217_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "149,800원",
+      "discountText": "-42%",
+      "discountedPrice": "86,884원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0177-PPSA25428_00-DELUXEEDITION001",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/1707/1c15fbeec02a491a742a711ada3c964a7dc3489e6b477dcb.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/2502/c6ad71e6cad5a90caa238db3d37560be7172d23b283f5a4b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/1708/24bd2d558a44d98aa1bf8e85bd4829de3e371484f1f33cd1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/1707/5f6b6eb996cb6bfcf3e5530584116ce498a06b0938815df4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/1707/a4c7dd4cd4e8a3c4c6b1da6a590dc78f5ee7110639cf454c.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/1708/08b4db53072a314acf86f4747dddf69de9f7f0ab8e718136.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1401/382491497f325afb8a679cc711b75288081155a1306c5cd7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1401/84cb5f6dcd7c80aa01b5a88455131b97037cdff28a340911.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1401/7e8341e6cc2fbbdc536b80492284a03afc501c9794de271f.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1401/899980be4f84b1016d3a2eb7206481501e05a721ff0eedad.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1401/dd22708a11334f6983f6a6f7cd7d1f4eb792ba80e1deb040.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/1708/4cc4d9c8d12d1b088f361eefda76b1810283080ca0f34da5.png"
+      }
+     ],
+     "name": "귀멸의 칼날 히노카미 혈풍담2　디럭스 에디션 PS4 & PS5 (한국어)",
+     "npTitleId": "PPSA25428_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "79,800원",
+      "discountText": "-50%",
+      "discountedPrice": "39,900원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP9000-PPSA01476_00-RATCHETCLANKRIFT",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202106/0822/02btw9UUMQQnqzqduvWXuRE4.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/U0nZxiIiAGP67E0j94AJNmYb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/OAXU4RdNBgekAdHsSNRhrsNJ.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/x64hEmgvhgxpXc9z9hpyLAyQ.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202105/2419/6sdeqIB0ZU2bSEhevpUiW0eY.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/CrGbGyUFNdkZKbg9DM2qPTE1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202006/1217/ClnHKlWvqhcJvHd3OsiXHuRc.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202006/1217/uhyIltavTLwMyE42Ge3ZAJci.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202006/1217/nQp80lBnu7ahcwCiz2sHUh9n.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202006/1217/w6kvRtcc2994kgRrUq4QAcrz.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202106/1103/WBdPT11quxcV5HfttcyM1MO7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202106/1103/8slnxYfSABeBgcPBjzlvnojN.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202106/1103/U2udpCcGzrmQNLK9sGmeUVjc.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202106/1103/euz2VOCvOYEDR8I7EyhOQ7j5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202106/1103/S2n6qegFTrJEmutXWwL10gni.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202106/1103/QSx37GhfFwBhW4neunmiQlee.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/DwVjpbKOsFOyPdNzmSTSWuxG.png"
+      }
+     ],
+     "name": "Ratchet & Clank: Rift Apart (중국어(간체자), 한국어, 영어, 중국어(번체자))",
+     "npTitleId": "PPSA01476_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "79,800원",
+      "discountText": "-58%",
+      "discountedPrice": "33,516원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "스페셜"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "JP0001-PPSA20398_00-EDITIONDELUXE000",
+     "localizedStoreDisplayClassification": "프리미엄 에디션",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202510/0818/60492ca418daeec0be9031957bf25568673c7295f87d1154.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202503/2016/b1c4a62b96ad965f303466e88c98054e8263082b5633020f.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202503/2000/cb5b92fa776637c6557b6c3b37ad7081d506a482983dffe9.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202412/1917/d3c5d82c886ce807a4727eb09e6318780276ebc904736f25.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2422/a510ff8adb652fedc6a054e9e5fc99d8ae3f93bed96ce277.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2422/c5366ce9e42e3f14c2b03457d2f639c8a5382354c1bf4621.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202412/1917/73631b692c4c1ae971608c7ed8d644a17cf859e8c5a1d5c2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2422/0f1101cb1ed430c8fbffeab60863436c5859eed18fb0593e.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2422/9ae25e2b22579334d5cc544a22a187f8ef95e53e451e57da.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2421/f66a434a38d5a5b825312d3c363951e96c66a421062b8a2d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2421/126e5cc2e9ac8b2b49651ae2afe70eecf81b8088bed4bbb4.JPG"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2421/a2d373624d4a82c85b6c5d0ccc9b11f70140c66edd90d6f7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2421/bdc88058dbb4e0351831d606bfaea907b993a83b1937061b.JPG"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2421/e35b34de119e2723056d68a0130bd1c712d009905da6d0c2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2421/1265a1d9b29cdd2982d802e89bbc7fb7b2c65a87efdba6c3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202506/2422/38f7413e954c0d43d9c4c0d5b03994775bc6094db21c8bb7.png"
+      }
+     ],
+     "name": "어쌔신 크리드 섀도우스 디지털 디럭스 에디션 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA20398_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "106,000원",
+      "discountText": "-50%",
+      "discountedPrice": "53,000원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "5% 추가 할인"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0700-PPSA24700_00-DLTS0ULTEDITION0",
+     "localizedStoreDisplayClassification": "프리미엄 에디션",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/1403/294343aac84b0ffa28e2a7f17cd006e1b56406808b20142b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/1403/e2497ace0b62accb076f7179f3f09871484afcf14a766a2b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1202/1dca527f97587b88828a773331b27ebba8795b855d0ca736.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/2010/2e4453940c6bc5aaeef53ae6a061610431284ef90824b8e8.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/1403/90a15d6f16f852282fc58c16c6d5b500555a5fb6e52c529b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/0202/0d5ee170255a2fa417327b48eb019603a04c9d9fe1bbb8c6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/0202/94f41b266cdf75520226b917ab070960c72eac39d31a97d8.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/0202/5f536b0199c1e1039d7c73a1807aafeb7ea5546cc2a4f80f.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/0202/4d8ce0d7453c7667c758cfb67482a0b7fc339bf6922cb000.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/0202/36bdee2efeefd9ed98499254e00502d2c5dad806ac8db457.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1807/c4f981cf2054a9aaf2ec62bb8d4f2de43a31e3eff742ee5f.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1807/4a507677df7078582f78f4cf02005ed302967e998086d8ba.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1807/cc0cb4828e5704446190d59653b67cc24ab935d6e0f72dd2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/0202/1d534ed8f09ccce5202b5a4f5adc143e6f5be2dca9adccc9.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/2010/9dc4ac4a02b19de734bd303610317abbea4216f1c2c9899a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/1403/b77964afb2a45c86a94ffd927ca23fcaf8039ae3f7a4ef1f.png"
+      }
+     ],
+     "name": "디지몬 스토리 타임 스트레인저 얼티밋 에디션 (중국어(간체자), 한국어, 중국어(번체자))",
+     "npTitleId": "PPSA24700_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "124,800원",
+      "discountText": "-40%",
+      "discountedPrice": "74,880원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EB0236-PPSA28336_00-0821195195639920",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202511/2012/1896fb12a7c4be34c6a0f297c6b9ae49e8c75924fa1e84da.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2313/6cc926ea82c65782ca7a037692146e339e0470cb17bd18d2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2313/e16f449377c67bf2453016f099ecc9dca79db3c139e05e89.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2313/691fa939e148839dba0f4ff102cdead51d8199494256c284.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1810/ec5fceb91057160c90d96b55e401aedb00316d7c5f96a099.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2313/a9c9f1de0c2db394c3eb622aec078d26b5bc5f30367b9665.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/d362b8ba5f97b066b7af357e7b1aa279df9105fff6e00a69.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/3da466da349afb98835518c2f0aa8519d29162b74790d1b7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/134e3020921cef4b70f3d7a3b234a9ffdbafb6316fcc3ce5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/cae5e7c6cbe20a0cc0353c88b0ff23aa13efd0d63dc1f0b8.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/f4b3da2066aa39b8e115367a261518f462bd079d7c35df62.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/fcd8c55bd9b6836eefa08302622638069f0bd03c2d2fd83b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/298194f997dfa5cdf36321b820da6d706db776b0c4eb07f7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/ba2bf323772d9301426e3001471687d8375b00c2277302c7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/8fd15a32b58ae060426aee498ffc7e7cad40f91855a9df16.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2208/bf71b4d6468dc2e92de1565a9ff39da949926db6a36bb9b7.png"
+      }
+     ],
+     "name": "S.T.A.L.K.E.R. 2: Heart of Chornobyl — 얼티밋 에디션 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA28336_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "119,800원",
+      "discountText": "-30%",
+      "discountedPrice": "83,860원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP9000-PPSA06020_00-HELLDIVERS200000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202608/1209/278aafa7cd31ac632eff8093ce7e03a41ed91ba39f35769b.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202509/0516/6bc8ccc6643abaa09ad7bfee80ad73b798d0f2b8063f7215.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/dde79130f54001fe7f7c47299ea194f258d6eab2f14ed323.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/94aab764c745211b3ae538f6a3dc21c4e3d00aca5a3a76ad.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/c329c36d036dde60ce93e3277338924339b8e58eaf1aabcc.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/fdc800fffc47e01c451adcb3472037877115dfd8ebdd860c.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/daae2ad2fdb62821c087017bfdb592a0a6b22a6a0473005d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/1117/6a7fc60b2c72e711198cf99894aaa3cdf1e89a2c0e033b19.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/1117/d6b2f3b9bf341cd05f497147e80a4463a56fdf1c753cb349.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/1117/f927dfab2eef6e1fc0e0bf79b37e4d05074709cdeb221f98.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/61e04e18ee82b6ca541688ebb6608c5108ecd9962ed1c71c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/324fd140c53b5d352b5303c086e4e031ce061c70b8f2d613.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/0a9a64f736a5bd2d93037f9860f465835cecb3fce24cdb45.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/15cfc7cb07cf25d38a3049d07b6f1bd7f3907a5841d3c7b7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/3ea4d009fcc3897ba885e9a623039bac2672fcdbf3e685f5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/46a0ee3b743f4ec07c84a1abbbfcfc20201f762ffbdd1d47.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202401/2418/7831c0bb54647c92c80f0f59872dd6ee10d84679ab3c3a8c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/e31cc02e8415785b44817d537fbe620c4057e9c80aa656d1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202608/0517/700bcf4d370673f3b7ee5c02a8b1e5b7e65a59ddfe829f18.png"
+      }
+     ],
+     "name": "HELLDIVERS™ 2 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA06020_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "44,800원",
+      "discountText": "-25%",
+      "discountedPrice": "33,600원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "스페셜"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0700-PPSA16441_00-TAIKORHYTHMFES00",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0506/831658d8412a22ded9c780cb6779d0cc22f696a0a0ffb65d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0506/77d149c762d01e0553d8afd32f06acce5fcae33d1c794d33.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0208/df8f3a06da918075399bddd777099982147e5b611a9f200e.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0506/a179f23fb80ebd9d7ac709ad4df813357ee3daa293c7d2bd.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0506/49dc7d4cb2a8c21cabb9dbcefbe56c3f623450457c2ec038.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/7374ed65cf7629bd51d0cfa811cf76e350b9d74381465667.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/f47acacca7ad309b1b81f89dd1c6e0b214201afb20262523.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/9b0577a64f5acbbd12d86e98828557b5b0894a89fbfb0066.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/2207caa8ea2226ab20451801f90e5cd92f13d8832cd38bce.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/340acd2250861b9aec7cabaa734e65c72391fcf2f33da3c6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/d42914a03faefa4b2b81a849cb9283e6c4325aa88bb7d887.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/fc2894dae498a87b5786c3f7f739087d59592c1cc3ad2224.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/82f70b4048bcd20ed21507a52c0efe570ea075b61f9ba502.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/87c5d1db2886fb37e715e2aee6aae8fae3d431daa444fd93.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0604/79a05893884c23eace486dc268db716af5612bacb8affae4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0208/64afa3e09dfd6f6b39384c819b9b43d2b0023a0bb19dc22e.png"
+      }
+     ],
+     "name": "태고의 달인 쿵딱! 원더풀 페스티벌 (중국어(간체자), 한국어, 중국어(번체자))",
+     "npTitleId": "PPSA16441_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "59,800원",
+      "discountText": "-50%",
+      "discountedPrice": "29,900원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "JP0001-PPSA22101_00-DLCEXPANSION0001",
+     "localizedStoreDisplayClassification": "에피소드",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2814/ae147e3b061e1b86887fe993193580f5aae850bb2169a198.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/0416/8d4b702ad3350bf8be57a9ac46ee2de7a9b44edc5e9e28f0.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/0416/4f46828d0a3cb729886d46ab716700f0e41e4d532cb36417.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2814/25fdab8e30899f6b39f75aa6b4043398f1aede385aacb992.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/2814/607b221596982a851ef23d4b46208b4f6225cdc921fd81dc.png"
+      }
+     ],
+     "name": "아와지의 덫 - 어쌔신 크리드 섀도우스 (한국어판)",
+     "npTitleId": "PPSA22101_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "29,000원",
+      "discountText": "-30%",
+      "discountedPrice": "20,300원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      },
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP5846-CUSA52898_00-LUNARRCGAME00000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202502/0401/3bf9e912c2f5d1eb410348b9df20493d69d2d7505f4a8b74.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/1202/cf2da61fa40e93f0b007ccc699b0eb6f534b38a501d1734c.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1407/43779155b482d94df135e9e53b6abed02ba8183333172285.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1407/4cd6fb01d0a8367fc1bcf74c18691629fbf61253c6cdeda5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1407/827207774e23fed4b83e035f1c4ed0e5bfbfff3d9bf7039b.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1407/59a2af68e7968f469d7de66d0bcd2bc922d7146cba590bb7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/be93f77dab47f2b391cf6c30a345ff11b055fda9680be7e6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/1065873cb5f97d4d3f835c55bed940fa990f498362fca5a0.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/4d36804e40fc0dfa4eafc308cb4e097f4224654bd5dab02c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/02438bf779825f690670533e7b7c12ddbe4837d02acbd745.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/fb9b3cfc04fb6c040a6c839c9c0400a41e42f1ba1dd49465.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/6a75b0c5e5d5d491133576c5d65758e4a1e891edd89e8975.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/d30fe584f25711c99c941cc5090143280771e9bd1bb487fb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/e4aa334a131ce975f15fa852786e7422c79effb77b00da4a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/a4f9f8a25c0fd951d7d0051bf753f522ee1c697cc45db365.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202502/2508/4fc68dd7d0f73afd0040c8aaeb90e576f9575c3d53841596.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202501/1407/4df7191dcf056356c5fcf630b4de3b7f653f8e60f35c43c2.png"
+      }
+     ],
+     "name": "LUNAR Remastered Collection (중국어(간체자), 한국어, 중국어(번체자))",
+     "npTitleId": "CUSA52898_00",
+     "platforms": [
+      "PS4"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "69,000원",
+      "discountText": "-30%",
+      "discountedPrice": "48,300원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP0177-PPSA19769_00-MUSEUMDELUXEEU00",
+     "localizedStoreDisplayClassification": "프리미엄 에디션",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202504/2805/02bf3e76ecc6ecda7903d88b0124485223d22722493f1606.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1213/9d5192c38d924fa7e58602357a73ea2663def9e6b339b57c.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1213/6218b86d28a90c472068afcea39cae48b8f15cc5e656aa3e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1213/82b798029578b00b447e5941be4ec477c5888cc015917e73.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202407/3014/6c078961fd9e9402a967d9f3530674512b0b1636b2127a21.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1213/342612abb804234e0cc322f4b8db14a15301bce0f33a1829.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1213/f9341b774fbe948f73dc52e3fc3bf7d5bf6c59185acc3a47.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0316/1eca95c5aa1a039a57b11dd45664681790fd9f17178a1ead.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0316/2b02674c776dc886764b48f1286babb335036787c5baa296.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0316/768d395720b3c31fd512cf2a8dcb931a672f01106e466be3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0316/1d9050103e893de4d01a785f675d1849d130939619789335.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202409/0316/333fa5ce3b08c932dc2469ebe92a1e6b47e76f24193dca82.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/0714/e2f7c1815096052de6e2b63f538b1bb7c9ee064fd30da613.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202408/1213/105ced505e83ae4ce05e12d9168b66ca8154e155ac277302.png"
+      }
+     ],
+     "name": "투 포인트 뮤지엄: Explorer Edition (중국어(간체자), 한국어, 태국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA19769_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "49,800원",
+      "discountText": "-33%",
+      "discountedPrice": "33,366원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP4389-PPSA14276_00-TRINE50000000000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202308/3113/2e250a2c8e0357d7a043a83887b251db65d7dd4969e71045.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202304/0813/a8a3b3f69944e894606d67e83ea2f17eb4ce038f61a7c114.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202308/1113/201dc363519ba46ab9b5e48d9728a66c988b8586824f3477.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202308/1113/f02400a99293b5038c3df2ce4bc111ca923561696dcbfecf.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202308/1113/ead70a1ab50fc476b5a1217454dadf2dec8031362155f22f.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202308/3113/93344185d35c83cd42290c2cdb1e4b8f34059a6bdb47a31e.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202307/2014/09f2801977a4ffdd47f620b35815656aa96b2615b53f96bf.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202307/2014/b1fbf46d960617ecb280ab14fe439fa5cb0c2e8eb9415817.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/b0c1dec3c67ef0dd562541f3e1e4ef9a6b31bf6b0610aaa2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/a5184f7d5f608f13716abbdb7170563b01c5546b0cc14862.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/ba40955ec69258ea23b1f1e7faf0191b785319874fee8282.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/c17ddd66d4755c4aae34260022a9c031e9b552c97ef0c877.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/a4723366ba60d8e4504af048a6cf66205ba5939c96f2c1f0.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/891aa85a5b461f21af794642c12f1d55bcf75e76db535f63.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/a05c21bd8158aa96326662f5b831da79c7f4505296f5f0f4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/49fd31dba3b8aea5c9c2ae93b72d51f50b2288082d1621b7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/60f53907d51572ecff573a81e3b76c6791b71aa69c22e0ce.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/826d17d1a201c69b720e506edf842600beb0b74ea526cfb0.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202303/1716/36e004d85d7ba025807907eda6884899dc848583fcede6b9.png"
+      }
+     ],
+     "name": "Trine 5: A Clockwork Conspiracy (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA14276_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "34,800원",
+      "discountText": "-65%",
+      "discountedPrice": "12,180원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP0001-CUSA09303_00-ASIAPLACEHOLDER0",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP0001/CUSA09303_00/UUuddiVjEzZUPaIWtXNCkyvLpFkuPrdw.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202010/0919/wxVZwwNQVsvgDTGQArKGS8Nt.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP0001/CUSA09303_00/FREE_CONTENTq7NrMAQnBzYy2yx0Iw4T/1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP0001/CUSA09303_00/FREE_CONTENTGCuvf6f44uStBQSSS9yz/2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/cdn/EP0001/CUSA09303_00/FREE_CONTENTKEJjeA34kliKeY5Y1TPw/3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202209/1208/cPLVeSodT9aWuBkmeqyvfXY7.png"
+      }
+     ],
+     "name": "Assassin's Creed Odyssey - 디지털 스탠다드 에디션 (중국어(간체자), 한국어, 영어, 중국어(번체자))",
+     "npTitleId": "CUSA09303_00",
+     "platforms": [
+      "PS4"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "66,000원",
+      "discountText": "-80%",
+      "discountedPrice": "13,200원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "스페셜"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "UB0876-PPSA24033_00-0357412205143914",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202607/1511/0ee9e7c34018c44646e3ae83ccd92e58d91e906412c888ba.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202607/1412/073f1c5b6556277a2cf1cf58b350036eab6c99df2b8a9060.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/f90430c3d610b69c6828a7336f4e770e4ad95c0ddc8f61d2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/ca1225f1bf9af7fa447d50886348ff85738067f159eb19b0.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/605892de08793ad4dac7703c960678fad4451daadd0b8bc6.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/e2fa1838d921c129018fdbdbc0789177ee633788e3f9c2e5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/16c316bef5d07a02067426e5ccd7035805cbbe710afe1703.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/aa98d17f536ae0a2018f4547960fa4a8fbf9461f78283e5d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/b3302836ed7ad52aa76e601750e44a740cae7c0113d4a1f2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/1eb0745d69840342763f85754bdb4e50bf6a2d5b5919c810.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/90ecfc4ad7dce5ba907d738c67406a59242b57d0feaf0408.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/07b51e1cf62eed8e0c0f6629b8ece3a0ad9e79ed39762824.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/5b2d64d376e215f8bdcdb1d728eff9b5fa7dfbfab576bf16.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/039ded0487d6f3b1fbd325d8d887d7b16da2ce8fd03db65c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/d442106cd496aa4d9eab1e63244fdfcfb9118a310ffaa296.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202606/1811/9f7656902eded5fc53f81dbf39ebe280007eed9385951ddf.png"
+      }
+     ],
+     "name": "Super Bunny Man (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA24033_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "10,800원",
+      "discountText": null,
+      "discountedPrice": "10,800원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "PS_PLUS"
+      ],
+      "upsellText": "10% 할인"
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EP0001-PPSA23559_00-ANNO117GOLD00000",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202512/0217/dc1d86cf011bad37bb340a61bd4f0fb03abe0d6b17b3eb7a.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202505/2712/f7f7f63ca5cf6b10b0fe453936282ae5905582fc581a34c0.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/1913/58a9b61c07f1ba050bf1348b2c734bf7a626b82abcb5b50f.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1323/d7d7f9e3e5e0825e79ac83b055c317b97f726fc57384e2d6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1323/8f9b6f0bdfcc8d5cb1c1603419f549f42ed6954dc5f17262.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202505/1912/04b51946ac3dab4e93dcb3b36e62aa1bc4d0ee678660d480.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1323/9411225a900c3e566ecf8e95a4ff67a45599e0f876870404.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1323/2a9ded855f9405a77be6a58f8363d32502918be33012bcd2.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1222/2f6c6066a3aefa80aef34e680899d93877a156dec51af89b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1222/c2f6eb83c0795eed6d52fe6ff71c20ef393ab5363bced63d.JPG"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1222/43622f26483313763cf8d205708fe1eb60200f6b4a7797a8.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202512/1614/3f35370ead6e4dbd1a03b4aea4cd8a0fa8d0b1cb92de21d9.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1222/81b04d0c180a40d02bb69d3e86284d468ec452aa61c2cc80.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1222/373010d8e7287fca8214acf3f4cd456b05712077ff83eada.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202512/1614/8123b86e7cc5b031f407266fcaf3b3087ff346b33426fd49.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1222/4293d9a4e0312e19161df9c1a85b1da43545e226f5030891.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1323/d17d9c1ccdd6c0d31c2743a6ee2baea09939489e541bf126.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1323/753795d7a14a9cae97765670a7d6523d7bf58245b3ae1cc7.png"
+      }
+     ],
+     "name": "아노 117: 팍스 로마나 골드 에디션 (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA23559_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "106,000원",
+      "discountText": "-30%",
+      "discountedPrice": "74,200원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "EB0236-PPSA28336_00-STALKER2UA000000",
+     "localizedStoreDisplayClassification": "제품판",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "PREVIEW",
+       "type": "VIDEO",
+       "url": "https://vulcan.dl.playstation.net/img/rnd/202511/2012/1896fb12a7c4be34c6a0f297c6b9ae49e8c75924fa1e84da.mp4"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2312/67d15ef855fd7e8ed03b4abe89b698070245a7a0b109a84a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2312/e4a87ee063539be165419235e63e8151a565bde6714136c6.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2312/9c25da3ca89396d6f037e94e74040683e91f4f5c56a4b642.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1909/8f6d83a2dfb319e9f16ede6f5636550fed5fe8cfb0440110.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202507/2312/7a656bdd36fab56d81d9688ea7d673db261fc0ced899022a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/d362b8ba5f97b066b7af357e7b1aa279df9105fff6e00a69.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/3da466da349afb98835518c2f0aa8519d29162b74790d1b7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/134e3020921cef4b70f3d7a3b234a9ffdbafb6316fcc3ce5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/cae5e7c6cbe20a0cc0353c88b0ff23aa13efd0d63dc1f0b8.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202509/1613/f4b3da2066aa39b8e115367a261518f462bd079d7c35df62.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/fcd8c55bd9b6836eefa08302622638069f0bd03c2d2fd83b.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/298194f997dfa5cdf36321b820da6d706db776b0c4eb07f7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/ba2bf323772d9301426e3001471687d8375b00c2277302c7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202508/1910/8fd15a32b58ae060426aee498ffc7e7cad40f91855a9df16.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1315/6e788ba24f0aca49079e644b7cd49136fbac28987aa9c16a.png"
+      }
+     ],
+     "name": "S.T.A.L.K.E.R. 2: Heart of Chornobyl (중국어(간체자), 한국어, 영어, 일본어, 중국어(번체자))",
+     "npTitleId": "PPSA28336_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "64,800원",
+      "discountText": "-30%",
+      "discountedPrice": "45,360원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP9000-PPSA29490_00-0000000000000000",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0118/f3d1de47a19c65e0860a87e32710a543ff7925041574d374.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "FOUR_BY_THREE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0118/9e959630fd7c1545920011296da07ec24eb3fe23658b3da1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0118/5e3fe44217c4ecb144f636b33debf58e0db223ff58ff0cbe.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0118/b23ee846abf0e2e24f8b1ca5644dfc73a0c7822b88450f0f.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "PORTRAIT_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0118/def1010b16e37eea14e61ca4c8beac163d0487b4a7ee98eb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/03bf47dbd042c50bfd6f539870b6f7a869d28d948e0fe19a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/126843b84b54f36b7f537199dc76b7bae1440bef31408bdc.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/ba2cdc2acab7a877533c7af52f028b936bb59c9a718643bb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/1bfcfb1f989618bbebc126a0b6aaee03a7883527550bf92c.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/d09569f542460bd6676e20dc4ff8bb03b882ec5628c802bc.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/cc4692b76317cd5a265a643d88d49ced74d5b2fd7c1f7cc5.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/4a04b795a5f6bf7a98789dd466919afc6a1143392792f2e6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/3fbc07d22d8bd34115e9ed1fa548b0fae16441ab85100fc6.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/42de6ec47f644ec0d148988e0743d49b93120a1706fd84de.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0820/c0494b89207c6249560cd3bb65bc0f7e211ccf58036362eb.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202504/0118/0f05dcc2c1623e6c88a698ba91de0d214e928134b03e6b04.png"
+      }
+     ],
+     "name": "The Last of Us™ 컴플리트 (중국어(간체자), 한국어, 태국어, 영어, 중국어(번체자))",
+     "npTitleId": "PPSA29490_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "118,000원",
+      "discountText": "-30%",
+      "discountedPrice": "82,600원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0700-PPSA10593_00-TK8S2DLXEDITION0",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202503/1403/377e1adf7650c390931cf551e98aab8ab47d1a3e34a25ca4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/504b01b1518a17d06b631c8290f07914f198bc5688db9d01.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202503/1403/244ac9b1217bccfbc6f7dfbadccdd8203cb7a7271fcda888.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/1dd562b60dbdedffac5425583dfc87f371afa4990af671a9.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/910b908f8051a5ebf7d42f3b790eb1ba3919f73762c34522.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/40472e5e38c22663c4a945d21e9d568a33b5a43b4996df7a.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/5852bf21180e57faf348d2c6f9e4ddae875816100fc0845e.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/f2e3229371e771807b0e20852883bd0f9a29d506f0738820.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/149d770da08513e4d0e484fbf9a3fb579824d5b5762db632.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/b0889865c001202aedfd05c62070e26b751d6c2d9515ae99.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/313fcba9589521f44d0614ddad261e0cff5b6d390b6ffbe4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/69e08c887882768e8230d6d3815b220ecfbc05a03c23b641.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202511/1803/f653512c2c7326f38a29b5952acc82fd6968e2eeb4b6bed1.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202503/1403/9376a5b99259c323849ed91c40068669b3b7ead961f5505e.png"
+      }
+     ],
+     "name": "철권 8 시즌 2 디럭스 에디션 (중국어(간체자), 한국어, 중국어(번체자))",
+     "npTitleId": "PPSA10593_00",
+     "platforms": [
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "99,800원",
+      "discountText": "-25%",
+      "discountedPrice": "74,850원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    },
+    {
+     "__typename": "Product",
+     "id": "HP0700-PPSA27500_00-ASIAFULLGAME0000",
+     "localizedStoreDisplayClassification": "게임 번들",
+     "media": [
+      {
+       "__typename": "Media",
+       "role": "BACKGROUND",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2009/f13e9556339d282945db661bba03fe47a58d3756017a8652.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "EDITION_KEY_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2009/4c586bd7e5a3219a1964e00ee34e7e95557dfde5dcbcfb1d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "GAMEHUB_COVER_ART",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/6f37ec07216417b4fd117e1085f1b97f202e48c7345f1d8d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "LOGO",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/img/rnd/202011/0208/skFvu5QVxydxeZD3MeHn3ykM.png"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/9dc4bcfdef08ccbc7beef104cbdbc68ea93e295ebfe4d652.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/f8195a49a0f222ccedc2299a53931d11bbd0a50888cd8302.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/f671e98cb72fa13a75a20356d6114a3e03e8b87f9f3014c9.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/d7c45718d122462272b849ce0033723faaddddc1a97e982d.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/36dbb7bbbc0959462768911415d3802319e71f05953c40b7.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SCREENSHOT",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2006/e66e5f95874781fa3155a3afedc29765157af53f4481b8b4.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "SIXTEEN_BY_NINE_BANNER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2009/df673221a5cdbfa5ceed04ebdfb027975fc5f13701d5c6b3.jpg"
+      },
+      {
+       "__typename": "Media",
+       "role": "MASTER",
+       "type": "IMAGE",
+       "url": "https://image.api.playstation.com/vulcan/ap/rnd/202510/2009/f93269dfc41bffddf7ae25db87d969d14205b0b87ac24c86.png"
+      }
+     ],
+     "name": "원피스 해적무쌍 4 PS4 & PS5 (중국어(간체자), 한국어, 태국어, 중국어(번체자))",
+     "npTitleId": "PPSA27500_00",
+     "platforms": [
+      "PS4",
+      "PS5"
+     ],
+     "price": {
+      "__typename": "SkuPrice",
+      "basePrice": "49,800원",
+      "discountText": "-80%",
+      "discountedPrice": "9,960원",
+      "isExclusive": false,
+      "isFree": false,
+      "isTiedToSubscription": false,
+      "serviceBranding": [
+       "NONE"
+      ],
+      "upsellServiceBranding": [
+       "NONE"
+      ],
+      "upsellText": null
+     },
+     "skus": [
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      },
+      {
+       "__typename": "Sku",
+       "type": "STANDARD"
+      }
+     ]
+    }
+   ],
+   "reportingName": "GMA_ALL_DEALS_(DYNAMIC)_2025",
+   "sortedBy": {
+    "__typename": "CategorySortingOption",
+    "displayName": "sales30",
+    "isAscending": false,
+    "name": "sales30"
+   },
+   "sortingOptions": [
+    {
+     "__typename": "CategorySortingOption",
+     "displayName": "베스트셀러",
+     "isAscending": false,
+     "name": "sales30"
+    },
+    {
+     "__typename": "CategorySortingOption",
+     "displayName": "최다 다운로드",
+     "isAscending": false,
+     "name": "downloads30"
+    },
+    {
+     "__typename": "CategorySortingOption",
+     "displayName": "이름(내림차순)",
+     "isAscending": true,
+     "name": "productName"
+    },
+    {
+     "__typename": "CategorySortingOption",
+     "displayName": "이름(오름차순)",
+     "isAscending": false,
+     "name": "productName"
+    },
+    {
+     "__typename": "CategorySortingOption",
+     "displayName": "출시일(오래된 순)",
+     "isAscending": true,
+     "name": "productReleaseDate"
+    },
+    {
+     "__typename": "CategorySortingOption",
+     "displayName": "출시일(새로운 순)",
+     "isAscending": false,
+     "name": "productReleaseDate"
+    }
+   ]
+  }
+ }
+}

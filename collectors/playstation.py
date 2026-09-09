@@ -1,18 +1,23 @@
 """플레이스테이션 한국 스토어 수집기.
 
-대상: https://store.playstation.com/ko-kr/pages/deals  (할인 프로모션 모음)
+수집 경로: web.np.playstation.com 의 공개 GraphQL `categoryGridRetrieve`.
 
-PS 스토어 웹은 Next.js 기반이라, 페이지 HTML 안의
-<script id="__NEXT_DATA__"> 태그에 상품 데이터가 JSON으로 통째로 들어 있다.
-HTML 셀렉터 파싱보다 이 JSON을 읽는 것이 훨씬 안정적이다.
+⚠️ 2026-08-11 사고 기록 — 왜 HTML 을 안 읽는가:
+  예전에는 스토어 페이지 HTML 의 <script id="__NEXT_DATA__"> 에서 상품을 읽었다.
+  소니가 목록을 클라이언트 렌더링으로 바꾸면서 그 JSON 의 apolloState 에 내비게이션
+  5개만 남고 상품이 통째로 사라졌다(실측: "Product: 0건). /pages/deals 허브도 같이
+  비어 프로모션 카테고리 링크가 0개가 됐고, 할인 수집 전체가 조용히 건너뛰어져
+  8회 연속 수집 실패했다(이상 감지 가드가 기존 데이터는 지켜 냈다).
+
+  그래서 HTML 목록 경로는 폴백으로도 남기지 않는다 — 0건을 돌려주는 경로로
+  되돌아가면 시간예산만 태우고 고장을 '조용한 부분 수집'으로 감춘다.
 
 동작:
-  1. /pages/deals 페이지 요청 → 원본 저장 → JSON에서 상품 추출
-  2. deals 페이지에 연결된 카테고리(프로모션) 목록 URL 수집
-  3. 각 카테고리의 페이지들을 순서대로 요청 → 원본 저장 → 상품 추출
+  1. 아래 고정 카테고리들을 GraphQL 로 100개씩 페이지네이션 → 원본 저장 → 즉시 저장
+  2. concepts 로만 오는 카테고리는 단품 오퍼레이션으로 가격을 채운다
+  3. 할인 종료일 보강 → 인기 Top10 순위
 """
 import json
-import re
 import time
 from urllib.parse import quote
 
@@ -22,35 +27,43 @@ from common.http_client import fetch
 from common.logging_util import get_logger
 from db import repository
 from parsers.playstation import (
-    extract_next_data,
     graphql_total_count,
+    parse_concepts_from_graphql,
     parse_cta_price,
     parse_product_meta,
     parse_products_from_graphql,
-    parse_concepts_from_next_data,
     parse_detail_end_time,
-    parse_products_from_next_data,
 )
 
 logger = get_logger(__name__)
 
 BASE = "https://store.playstation.com"
-DEALS_URL = f"{BASE}/ko-kr/pages/deals"
 
-# deals 페이지 안의 카테고리(프로모션) 링크 형식
-CATEGORY_URL_RE = re.compile(r"/ko-kr/category/([0-9a-f-]{36})")
-MAX_CATEGORY_PAGES = 100  # 카테고리당 최대 페이지 수 (안전장치)
-MAX_CATEGORIES = 30       # 한 번에 수집할 최대 프로모션 수
-
-# 신작·출시예정 카테고리 (할인과 같은 __NEXT_DATA__ 구조라 기존 파서를 그대로 쓴다).
-# 규모가 작아(수십 개) 할인 크롤보다 **먼저** 수집한다 — 할인 크롤이 시간예산을
-# 다 쓰면 뒤에 둔 단계는 영영 실행되지 않기 때문.
-RELEASE_CATEGORIES = [
-    ("new", "e1699f77-77e1-43ca-a296-26d08abacb0f"),       # 신규 발매
-    ("upcoming", "3bf499d7-7acf-4931-97dd-2667494ee2c9"),  # 출시 예정
-    ("free", "4dfd67ab-4ed7-40b0-a937-a549aece13d0"),      # 무료 게임
+# GMA(스토어가 자동 편성하는) 고정 카테고리. UUID 가 회전하지 않아 허브 파싱이 필요없다.
+# reportingName·건수는 실측(2026-08-13, ko-kr).
+#
+# 회전하는 프로모션 카테고리를 굳이 찾지 않는 이유: 프로모션 상품은 정의상 할인 중이고
+# '모든 할인'(AllDeals)은 그 상위집합이다. 즉 프로모션을 30개 훑던 예전 방식과 범위가
+# 같으면서 요청 수는 훨씬 적다(예전 68분 → 실측 기준 20분 이하).
+#
+# (이름, 카테고리 ID, 붙일 content_kind)
+CATALOG_CATEGORIES = [
+    # GMA_ALL_DEALS_(DYNAMIC)_2025 / cat.gma.AllDeals — 2,259건. 할인 피드의 근원.
+    ("AllDeals", "3f772501-f6f8-49b7-abac-874a88ca4897", None),
+    # GMA_PRE-ORDERS_DYNAMIC / cat.gma.Pre-Orders — 103건. products 로 와서 가격이 있다.
+    ("PreOrders", "3bf499d7-7acf-4931-97dd-2667494ee2c9", "upcoming"),
+    # GMA_ALL_PS4_GAMES_DYNA / cat.gma.x_All_PS4_games — 5,344건. 카탈로그 폭(상세페이지)용.
+    ("AllPS4", "30e3fe35-8f2d-4496-95bc-844f56952e3c", None),
 ]
-RELEASE_MAX_PAGES = 3  # 카테고리당 최대 페이지 (페이지당 ~24개)
+
+# 이 카테고리들은 grid 가 products 대신 concepts 로만 응답한다(실측). concepts 에는
+# 가격이 안 실려 오므로 상품당 1요청으로 가격을 채운다 — 안 채우면 무료·신작 탭이
+# 가격 없는 카드로 채워진다.
+CONCEPT_CATEGORIES = [
+    ("NewGames", "e1699f77-77e1-43ca-a296-26d08abacb0f", "new"),    # 134건
+    ("FreeToPlay", "4dfd67ab-4ed7-40b0-a937-a549aece13d0", "free"),  # 148건
+]
+
 # 단품 오퍼레이션으로 보강하는 필드 — 다음 실행에서 그대로 되살릴 값들
 META_KEYS = ("release_date", "publisher", "genres", "content_rating",
              "short_description", "players", "platforms",
@@ -65,7 +78,7 @@ GQL_URL = "https://web.np.playstation.com/api/graphql/v1/op"
 POPULAR_CATEGORY = "fbb563aa-c602-476d-bb92-fe7f35080205"
 GQL_HASH = "9845afc0dbaab4965f6563fffc703f588c8e76792000e8610843b8d3ee9c4c09"
 GQL_PAGE_SIZE = 100
-GQL_MAX_PAGES = 60  # 카테고리당 최대 6,000개 (무한 루프 방지)
+GQL_MAX_PAGES = 100  # 카테고리당 최대 10,000개 (스토어의 offset 상한과 동일)
 
 # 단품 조회 오퍼레이션 — 상세 HTML(1건 400KB) 대신 쓴다.
 # 종료일만 필요할 땐 CTA 쪽이 2.7KB라 약 150배 가볍다(실측). 둘 다 직접 호출 검증함.
@@ -83,15 +96,18 @@ class PlaystationCollector(BaseCollector):
     FIELD_FLOORS = {"title": 0.95, "image_url": 0.70, "final_price": 0.80}
 
     # collect()에서 실제 값으로 설정된다 (단위 테스트/부분 호출 시의 기본값)
-    _gql_ok = _cta_ok = _meta_ok = True
+    _cta_ok = _meta_ok = True
     _job_deadline = float("inf")
-    _meta_fetched = 0   # 실행 전체에서 새로 조회한 메타 건수 (상한 기준)
+    _meta_fetched = 0    # 실행 전체에서 새로 조회한 메타 건수 (상한 기준)
+    _price_fetched = 0   # 실행 전체에서 새로 조회한 concept 가격 건수 (상한 기준)
+    _meta_cache: dict | None = None
 
     def collect(self) -> None:
-        self._gql_ok = True   # 카테고리 그리드 GraphQL (실패 시 HTML 폴백)
         self._cta_ok = True   # 종료일 CTA 오퍼레이션 (실패 시 상세 HTML 폴백)
         self._meta_ok = True  # 출시일·퍼블리셔 오퍼레이션 (실패 시 보강 생략)
         self._meta_fetched = 0
+        self._price_fetched = 0
+        self._meta_cache = None
         seen_ids: set[str] = set()
 
         # 보강 메타(출시일·퍼블리셔·장르·DLC판별) 보존은 이제 저장 계층의
@@ -115,68 +131,25 @@ class PlaystationCollector(BaseCollector):
         except Exception:
             pass  # 워밍업 실패는 무시하고 진행
 
-        # 0. 신작·출시예정 (소량) — 할인 크롤이 시간예산을 다 써도 반드시 수집되도록 먼저
-        self._collect_releases(seen_ids)
+        # 1. 신작·무료 (concepts 전용, 소량) — 할인 크롤이 시간예산을 다 써도 반드시
+        #    수집되도록 먼저 돌린다. content_kind 가 여기서만 붙으므로 밀리면 탭이 빈다.
+        self._collect_releases(seen_ids, saved, crawl_deadline)
 
-        # 1. deals 허브 페이지
-        result = fetch(DEALS_URL)
-        if result.status_code != 200:
-            self.record_parse_error(DEALS_URL, f"deals 페이지 상태코드 {result.status_code}")
-            return
-
-        raw_doc_id = self.save_raw(
-            result, document_type="list", filename="deals-hub.html",
-            content_type="text/html",
-        )
-        self.pages_found += 1
-
-        next_data = extract_next_data(result.text)
-        if next_data:
-            for item in parse_products_from_next_data(next_data):
-                if item.store_product_id not in seen_ids:
-                    seen_ids.add(item.store_product_id)
-                    self.save_item(item, raw_doc_id)  # 즉시 저장(부분 실패해도 데이터 보존)
-                    saved.append(item)
-        else:
-            self.record_parse_error(DEALS_URL, "__NEXT_DATA__를 찾지 못함")
-
-        # 2. 카테고리(프로모션) 링크 수집
-        category_ids = list(dict.fromkeys(CATEGORY_URL_RE.findall(result.text)))
-        logger.info("[playstation] 프로모션 카테고리 %d개 발견", len(category_ids))
-        if not category_ids:
-            # 링크가 0개면 할인 수집 전체가 조용히 건너뛰어진다(허브 마크업 변경·차단)
-            self.record_parse_error(DEALS_URL, "프로모션 카테고리 링크 0개 (차단/마크업 의심)")
-
-        # 3. 각 카테고리를 페이지 단위로 순회 (페이지마다 즉시 저장)
-        #    시간예산이 짧으면 앞쪽 카테고리만 반복해서 훑고 뒤쪽은 영영 못 보게 된다
-        #    (→ 뒤쪽 상품은 last_seen_at 이 안 갱신돼 웹에서 사라짐).
-        #    실행마다 시작 위치를 회전시켜 여러 번에 걸쳐 전체를 covering 한다.
-        #    12시간 단위로 회전 = 하루 2회 실행에서 매번 다른 지점부터 시작.
-        targets = category_ids[:MAX_CATEGORIES]
-        if targets:
-            start = int(time.time() // (12 * 3600)) % len(targets)
-            targets = targets[start:] + targets[:start]
-            logger.info("[playstation] 카테고리 %d개 중 %d번째부터 순회 (회전)", len(targets), start)
-        for category_id in targets:
+        # 2. 고정 카테고리 (할인 → 출시예정 → PS4 카탈로그 순)
+        for name, category_id, kind in CATALOG_CATEGORIES:
             if time.monotonic() >= crawl_deadline:
                 logger.info(
                     "[playstation] 크롤 시간예산(%d분) 소진 — 남은 카테고리 건너뛰고 종료일 보강으로",
                     config.PS_CRAWL_BUDGET_SECONDS // 60,
                 )
                 break
-            if self._gql_ok:
-                if self._collect_category_gql(category_id, seen_ids, saved, crawl_deadline):
-                    continue
-                # 한 번 실패하면 이 실행 내내 검증된 HTML 경로를 쓴다
-                self._gql_ok = False
-                logger.warning('[playstation] GraphQL 사용 불가 — HTML 경로로 전환')
-            self._collect_category(category_id, seen_ids, saved, crawl_deadline)
+            self._collect_grid(name, category_id, kind, seen_ids, saved, crawl_deadline)
 
-        # 4. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신.
+        # 3. 할인 종료일 보강 — 이미 저장된 상품의 최신 스냅샷에 in-place 갱신.
         #    크롤이 시간예산으로 조기 종료되어도 이 단계는 반드시 실행된다.
         self._enrich_end_dates(saved)
 
-        # 5. 인기(국내 Top 10) — 요청 몇 번이라 시간예산과 무관하게 마지막에 붙인다.
+        # 4. 인기(국내 Top 10) — 요청 몇 번이라 시간예산과 무관하게 마지막에 붙인다.
         self._collect_popular()
 
     def _collect_popular(self) -> None:
@@ -288,90 +261,41 @@ class PlaystationCollector(BaseCollector):
         logger.info("[playstation] 인기 Top10 — 순위 %d개 저장, 미보유 %d개, 지난 순위 %d개 정리",
                     updated, missing, cleared)
 
-    def _collect_releases(self, seen_ids: set[str]) -> None:
-        """신작·출시예정 카테고리를 수집한다 (할인과 동일한 __NEXT_DATA__ 구조).
+    def _collect_releases(self, seen_ids: set[str], saved: list, deadline: float) -> None:
+        """concepts 로만 오는 카테고리(신작·무료)를 수집한다.
 
-        출시예정작은 아직 가격이 없거나 정가만 있어 is_on_sale=False 로 저장되므로
-        할인 목록에는 섞이지 않는다. content_kind 로 종류를 표시한다.
-        실패해도 이후 할인 수집은 계속되도록 예외를 흡수한다.
-
-        목록엔 출시일이 없어서 여기서 단품 오퍼레이션으로 보강한다. 이미 보강해 둔
-        상품은 DB에서 한 번에 읽어와 재요청 없이 값을 유지한다.
+        가격이 안 실려 오므로(_collect_grid 의 concepts 경로) 상품당 1요청으로 채운다.
+        content_kind 가 이 단계에서만 붙어서, 밀리면 웹의 신작·무료 탭이 빈다.
+        실패해도 이후 할인 수집은 계속되도록 카테고리 단위로 예외를 흡수한다.
         """
-        try:
-            cached_meta = repository.fetch_item_meta(
-                self.platform, config.STORE_REGION, list(META_KEYS)
-            )
-        except Exception:
-            logger.exception("[playstation] 기존 메타 조회 실패 — 보강만 새로 수행")
-            cached_meta = {}
-        meta_fetched = 0
+        for name, category_id, kind in CONCEPT_CATEGORIES:
+            if time.monotonic() >= deadline:
+                logger.warning("[playstation] 시간예산 소진 — %s 건너뜀 (해당 탭이 빈다)", name)
+                continue
+            try:
+                self._collect_grid(name, category_id, kind, seen_ids, saved, deadline,
+                                   concepts=True)
+            except Exception:
+                logger.exception("[playstation] %s 카테고리 수집 실패", name)
 
-        for kind, category_id in RELEASE_CATEGORIES:
-            count = 0
-            for page in range(1, RELEASE_MAX_PAGES + 1):
-                url = f"{BASE}/ko-kr/category/{category_id}/{page}"
-                try:
-                    result = fetch(url)
-                    if result.status_code != 200:
-                        break
-                    raw_doc_id = self.save_raw(
-                        result, document_type="list",
-                        filename=f"{kind}-{category_id}-p{page}.html",
-                        content_type="text/html",
-                    )
-                    self.pages_found += 1
+    def _collect_grid(
+        self, name: str, category_id: str, kind: str | None,
+        seen_ids: set[str], saved: list, deadline: float, *, concepts: bool = False,
+    ) -> None:
+        """GraphQL 로 카테고리를 100개씩 훑는다 (페이지마다 즉시 저장).
 
-                    next_data = extract_next_data(result.text)
-                    if not next_data:
-                        self.record_parse_error(url, f"{kind} __NEXT_DATA__ 없음 (차단/마크업 의심)")
-                        break
-                    items = parse_products_from_next_data(next_data)
-                    if not items:
-                        # '신규 발매'처럼 Product가 껍데기인 카테고리는 Concept에 실제 데이터가 있다
-                        items = parse_concepts_from_next_data(next_data)
-                    if not items:
-                        # 1페이지가 0건이면 그 종류를 이번 실행에 전혀 못 붙인다 →
-                        # 뒤따르는 할인 저장이 content_kind 를 지운 채로 끝난다(신작·무료
-                        # 탭이 빈다). 정상 종료와 구분해 오류로 남긴다.
-                        if page == 1:
-                            logger.warning("[playstation] %s 1페이지 0건 — 실패로 기록", kind)
-                            self.record_parse_error(url, f"{kind} 1페이지 0건 (마크업/차단 의심)")
-                        break
-                    new_items = [i for i in items if i.store_product_id not in seen_ids]
-                    meta_fetched += self._enrich_release_meta(new_items, cached_meta)
-                    for item in new_items:
-                        seen_ids.add(item.store_product_id)
-                        item.extracted_data["content_kind"] = kind
-                        self.save_item(item, raw_doc_id)
-                    count += len(new_items)
-                    if not new_items:
-                        break  # 더 볼 게 없음
-                except Exception:
-                    logger.exception("[playstation] %s 카테고리 수집 실패 (page %d)", kind, page)
-                    break
-            logger.info("[playstation] %s %d개 저장", kind, count)
-
-        logger.info("[playstation] 출시일·퍼블리셔 보강 — 신규 조회 %d건 (기보유 %d건은 재사용)",
-                    meta_fetched, len(cached_meta))
-
-    def _collect_category_gql(
-        self, category_id: str, seen_ids: set[str], saved: list, deadline: float
-    ) -> bool:
-        """GraphQL로 카테고리를 훑는다. 성공하면 True.
-
-        HTML 페이지는 24개씩 주지만 이쪽은 100개씩 준다(실측). 요청 수가 1/4이라
-        같은 시간예산으로 훨씬 넓게 덮는다.
-
-        주의: persistedQuery 해시는 소니가 스키마를 바꾸면 무효가 될 수 있다(외부에서
-        얻은 값이라 수명을 보장 못 함). 그래서 실패하면 False를 돌려주고 호출부가
-        검증된 HTML 경로로 되돌아가게 한다 — 최악의 경우에도 지금 동작 그대로다.
+        concepts=True 인 카테고리는 가격이 없는 채로 오므로, 새로 본 상품에만
+        가격·메타를 단품 오퍼레이션으로 덧입힌 뒤 저장한다.
         """
         offset = 0
-        got_any = False
+        total = None
+        got = 0
+        cached_meta = self._release_meta_cache() if concepts else {}
+        requests = 0
         for _ in range(GQL_MAX_PAGES):
             if time.monotonic() >= deadline:
                 break
+            requests += 1
             variables = json.dumps({
                 "id": category_id,
                 "pageArgs": {"size": GQL_PAGE_SIZE, "offset": offset},
@@ -392,100 +316,118 @@ class PlaystationCollector(BaseCollector):
                     "x-psn-store-locale-override": "ko-kr",
                 })
                 if result.status_code != 200:
-                    return got_any
+                    self.record_parse_error(url, f"{name} 상태코드 {result.status_code}")
+                    return
                 data = json.loads(result.text)
                 if data.get("errors"):
-                    return got_any
-                items = parse_products_from_graphql(data)
+                    self.record_parse_error(url, f"{name} GraphQL 오류: {str(data['errors'])[:180]}")
+                    return
+                items = (parse_concepts_from_graphql(data) if concepts
+                         else parse_products_from_graphql(data))
                 total = graphql_total_count(data)
             except Exception:
-                logger.exception("[playstation] GraphQL 실패 %s", category_id[:8])
-                return got_any
+                logger.exception("[playstation] %s GraphQL 실패 (offset %d)", name, offset)
+                return
 
             if not items:
-                # 빈 응답을 'GraphQL 사용 불가'로 승격하면 실행 전체가 24개/요청 HTML로
-                # 내려가 커버리지가 급감한다(요청 4배). 이 카테고리만 접는다.
                 if offset == 0:
-                    self.record_parse_error(GQL_URL, f"카테고리 {category_id[:8]} GQL 0건 (일시 응답 의심)")
-                return got_any or offset > 0
-            got_any = True
+                    # 1페이지 0건 = 이 카테고리가 이번 실행에서 통째로 빠진다.
+                    # AllDeals 가 이렇게 되면 할인 피드가 갱신되지 않으므로 반드시 남긴다.
+                    self.record_parse_error(url, f"{name} 1페이지 0건 (스키마 변경/차단 의심)")
+                    logger.warning("[playstation] %s 1페이지 0건 — 실패로 기록", name)
+                return
 
             raw_doc_id = self.save_raw(
                 result, document_type="list",
-                filename=f"gql-{category_id}-o{offset}.json",
+                filename=f"gql-{name}-o{offset}.json",
                 content_type="application/json",
             )
             self.pages_found += 1
 
             new_items = [i for i in items if i.store_product_id not in seen_ids]
+            if concepts:
+                self._enrich_concept_prices(new_items)
+                self._enrich_release_meta(new_items, cached_meta)
             for item in new_items:
                 seen_ids.add(item.store_product_id)
+                if kind:
+                    item.extracted_data["content_kind"] = kind
                 self.save_item(item, raw_doc_id)
                 saved.append(item)
-            logger.info("[playstation] GQL %s offset %d: %d개 (신규 %d/전체 %s)",
-                        category_id[:8], offset, len(items), len(new_items), total)
+            got += len(new_items)
+            logger.info("[playstation] %s offset %d: %d개 (신규 %d/전체 %s)",
+                        name, offset, len(items), len(new_items), total)
 
             offset += len(items)
             if total is not None and offset >= total:
                 break
-        return got_any
 
-    def _collect_category(
-        self, category_id: str, seen_ids: set[str], saved: list, deadline: float
-    ) -> None:
-        no_new_streak = 0  # 신규 상품 0건인 페이지가 연속으로 나온 횟수
-        for page in range(1, MAX_CATEGORY_PAGES + 1):
-            if time.monotonic() >= deadline:
-                break  # 시간예산 소진 — 이 카테고리도 중단
-            url = f"{BASE}/ko-kr/category/{category_id}/{page}"
-            result = fetch(url)
+        # 절단은 반드시 남긴다 — 시간예산이든 페이지 상한이든, 조용히 끊기면
+        # 뒤쪽 상품은 last_seen_at 이 안 갱신돼 웹에서 사라지는데 로그만 보면 정상이다.
+        if total is not None and offset < total:
+            logger.warning("[playstation] %s 절단 — %d/%d 만 훑었다 (%s)",
+                           name, offset, total,
+                           "시간예산 소진" if time.monotonic() >= deadline
+                           else f"페이지 상한 {GQL_MAX_PAGES}")
+        logger.info("[playstation] %s %d개 저장 (전체 %s, 요청 %d회)", name, got, total, requests)
 
-            if result.status_code == 404:
-                break  # 페이지 끝
-            if result.status_code != 200:
-                self.record_parse_error(url, f"카테고리 페이지 상태코드 {result.status_code}")
-                break
+    def _release_meta_cache(self) -> dict:
+        """이미 보강해 둔 출시일·퍼블리셔 등을 한 번에 읽어 재요청을 막는다."""
+        if self._meta_cache is None:
+            try:
+                self._meta_cache = repository.fetch_item_meta(
+                    self.platform, config.STORE_REGION, list(META_KEYS)
+                )
+            except Exception:
+                logger.exception("[playstation] 기존 메타 조회 실패 — 보강만 새로 수행")
+                self._meta_cache = {}
+        return self._meta_cache
 
-            raw_doc_id = self.save_raw(
-                result, document_type="list",
-                filename=f"category-{category_id}-p{page}.html",
-                content_type="text/html",
+    def _enrich_concept_prices(self, items: list) -> int:
+        """concepts 로 온 상품의 가격을 단품 CTA 오퍼레이션으로 채운다.
+
+        grid 의 concepts 노드엔 price 가 없다(실측). 안 채우면 무료·신작 탭이 가격
+        없는 카드로 채워지고, final_price 커버리지 하한(FIELD_FLOORS)도 위태롭다.
+
+        PS Plus 가입자 전용가는 일반 이용자의 체감가가 아니므로 할인으로 보지 않고
+        정가만 채운다 (parse_cta_price 의 plus_only).
+        """
+        budget = config.PS_CONCEPT_PRICE_MAX
+        filled = 0
+        for item in items:
+            if item.final_price is not None:
+                continue
+            if self._price_fetched >= budget or not self._cta_ok:
+                continue
+            if time.monotonic() >= self._job_deadline:
+                continue
+            data = self._gql_product(GQL_CTA_OP, GQL_CTA_HASH, item.store_product_id)
+            if data is None:
+                self._cta_ok = False
+                logger.warning("[playstation] CTA 오퍼레이션 사용 불가 — concept 가격 보강 중단")
+                continue
+            self._price_fetched += 1
+            info = parse_cta_price(data)
+            if not info:
+                continue
+            base = info.get("base_price")
+            disc = info.get("discounted_price")
+            if base is None and disc is None:
+                continue
+            on_sale = (
+                not info.get("plus_only")
+                and base is not None and disc is not None and disc < base
             )
-            self.pages_found += 1
-
-            next_data = extract_next_data(result.text)
-            if not next_data:
-                self.record_parse_error(url, "__NEXT_DATA__를 찾지 못함")
-                break
-
-            items = parse_products_from_next_data(next_data)
-            if not items:
-                # 1페이지 0건이면 이 프로모션 전체가 이번 실행에서 누락된다 → 보이게 기록
-                if page == 1:
-                    self.record_parse_error(url, "카테고리 1페이지 상품 0건 (마크업/차단 의심)")
-                break  # 상품이 아예 없으면 카테고리 끝
-
-            new_items = [i for i in items if i.store_product_id not in seen_ids]
-            for item in new_items:
-                seen_ids.add(item.store_product_id)
-                self.save_item(item, raw_doc_id)  # 즉시 저장
-                saved.append(item)
-
-            logger.info(
-                "[playstation] 카테고리 %s %d페이지: 상품 %d개 (신규 %d)",
-                category_id[:8], page, len(items), len(new_items),
-            )
-
-            # 카테고리끼리 상품이 크게 겹쳐, 신규가 0건인 페이지가 연속 2번이면
-            # 이 카테고리는 사실상 소진된 것으로 보고 조기 종료한다(크롤 시간 대폭 단축).
-            if not new_items:
-                no_new_streak += 1
-                if no_new_streak >= 2:
-                    logger.info("[playstation] 카테고리 %s 연속 %d페이지 신규 없음 — 조기 종료",
-                                category_id[:8], no_new_streak)
-                    break
-            else:
-                no_new_streak = 0
+            item.regular_price = base if base is not None else disc
+            item.final_price = disc if (on_sale and disc is not None) else item.regular_price
+            item.sale_price = item.final_price if on_sale else None
+            item.is_on_sale = on_sale
+            if on_sale and base:
+                item.discount_percent = round((base - item.final_price) / base * 100, 2)
+            if on_sale:
+                item.sale_end_at = info.get("sale_end_at")
+            filled += 1
+        return filled
 
     def _enrich_end_dates(self, saved: list) -> None:
         """할인율 상위 N개 상품의 상세 페이지에서 할인 종료일을 받아 최신 스냅샷에 덧입힌다.

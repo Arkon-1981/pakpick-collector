@@ -76,6 +76,12 @@ PS_DETAIL_END_MAX = int(os.environ.get("PS_DETAIL_END_MAX", "300"))
 # 한 번 채운 상품은 DB에서 읽어 재사용하므로 실제 비용은 '새로 등장한 상품'뿐이다.
 PS_RELEASE_META_MAX = int(os.environ.get("PS_RELEASE_META_MAX", "150"))
 
+# '신규 발매'·'무료 게임' 카테고리는 목록(grid)이 concepts 로만 응답하고 concepts 에는
+# 가격이 실려 오지 않는다(실측 2026-08-13). 그래서 이 상품들만 단품 CTA 오퍼레이션으로
+# 가격을 채우는데, 상품당 1요청이라 상한을 둔다. 두 카테고리 합계가 실측 282건이라
+# 400 이면 전부 덮으면서도 스토어가 카테고리를 크게 늘렸을 때 폭주하지 않는다.
+PS_CONCEPT_PRICE_MAX = int(os.environ.get("PS_CONCEPT_PRICE_MAX", "400"))
+
 # PS 목록 크롤에 쓸 최대 시간(초). 이 시간이 지나면 남은 카테고리/페이지를 건너뛰고
 # 곧바로 '할인 종료일 보강' 단계로 넘어간다. PS 목록은 카테고리×페이지가 많아 정중한
 # 간격(6~12초)으로 전부 훑으면 GitHub Actions 잡 타임아웃(120분)을 넘겨 잡이 통째로
