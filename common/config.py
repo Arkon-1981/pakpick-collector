@@ -86,17 +86,20 @@ PS_CONCEPT_PRICE_MAX = int(os.environ.get("PS_CONCEPT_PRICE_MAX", "400"))
 # 곧바로 '할인 종료일 보강' 단계로 넘어간다. PS 목록은 카테고리×페이지가 많아 정중한
 # 간격(6~12초)으로 전부 훑으면 GitHub Actions 잡 타임아웃(120분)을 넘겨 잡이 통째로
 # 취소되고, 그러면 크롤 뒤에 실행되는 종료일 보강이 아예 못 돌던 문제가 있었다.
-# 크롤을 이 시간으로 제한해, 남은 시간(보강 상위 N개 상세 요청) 안에서 종료일 보강이
-# 반드시 실행되도록 보장한다. 기본 45분 — Actions 사용 분을 아끼기 위해 85분에서 줄였고,
-# 짧아진 만큼 매 실행 시작 카테고리를 회전시켜(collectors/playstation.py) 여러 실행에
-# 걸쳐 전체 카테고리를 훑는다.
-PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "2700"))
+# 크롤을 이 시간으로 제한해, 남은 시간 안에서 종료일 보강이 반드시 실행되도록 한다.
+#
+# 85분으로 되돌렸다. 45분이던 이유는 '종료일 보강에 시간을 남겨 둬야 한다'였는데,
+# 그 보강이 죽은 HTML 경로에서 33분을 태우고 있었다(실측 run 250: 300건 요청 → 종료일
+# 10건). 그 경로를 지워 보강이 GraphQL 로 상품당 ~2초가 되면서 남길 시간이 크게 줄었다.
+# 반대로 크롤은 저장 포함 100개당 84초라 45분으로는 할인 카테고리 하나도 못 끝냈다.
+PS_CRAWL_BUDGET_SECONDS = int(os.environ.get("PS_CRAWL_BUDGET_SECONDS", "5100"))
 
 # PS 잡 전체 시간 상한(초). 목록 크롤이 끝난 뒤의 보강 단계까지 포함한 총량이다.
 # 보강은 상품당 1요청이라 상한(PS_DETAIL_END_MAX 등)을 올리면 시간이 길어지는데,
 # 여기서 잘라 주지 않으면 Actions 잡 타임아웃(120분)에 걸려 실행이 통째로 '취소'로
-# 남는다. 100분에서 멈추면 그때까지 보강한 내용은 정상 저장되고 실행도 성공 처리된다.
-PS_TOTAL_BUDGET_SECONDS = int(os.environ.get("PS_TOTAL_BUDGET_SECONDS", "6000"))
+# 남는다. 110분에서 멈추면 그때까지 보강한 내용은 정상 저장되고 실행도 성공 처리된다.
+# 크롤 85분 + 보강 25분(GraphQL 로 상품당 ~2초 × 300건 = 10분) 배분이다.
+PS_TOTAL_BUDGET_SECONDS = int(os.environ.get("PS_TOTAL_BUDGET_SECONDS", "6600"))
 
 STORE_REGION = "KR"
 
