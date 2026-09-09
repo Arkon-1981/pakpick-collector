@@ -7,6 +7,7 @@
 기존 테스트와 같은 스크립트 스타일(pytest 불필요): python tests/test_field_preservation.py
 """
 import json
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -448,17 +449,19 @@ def test_ps_html_list_path_is_gone() -> None:
     # 사고 경위는 주석으로 남겨 두므로 '코드'에만 없어야 한다
     code = "\n".join(l for l in src.splitlines() if not l.strip().startswith("#"))
     for dead in ("parse_products_from_next_data", "parse_concepts_from_next_data",
-                 "extract_next_data", "DEALS_URL", "CATEGORY_URL_RE"):
+                 "extract_next_data", "DEALS_URL", "CATEGORY_URL_RE",
+                 # 종료일 HTML 폴백 — 300건 33분에 종료일 10건이었다(run 250)
+                 "_end_date_via_html", "parse_detail_end_time"):
         check(f"PS: 수집기에 죽은 HTML 경로가 없다 ({dead})", dead not in code)
     for dead in ("parse_products_from_next_data", "parse_concepts_from_next_data",
-                 "extract_next_data"):
+                 "extract_next_data", "parse_detail_end_time"):
         check(f"PS: 파서에서도 제거됨 ({dead})", not hasattr(pp, dead))
     # 카테고리 UUID 는 이제 코드에 고정돼 있다 — 비면 할인 수집이 통째로 사라진다
     from collectors.playstation import CATALOG_CATEGORIES, CONCEPT_CATEGORIES
-    ids = [c[1] for c in CATALOG_CATEGORIES + CONCEPT_CATEGORIES]
+    ids = [c[1] for c in CATALOG_CATEGORIES] + [c[1] for c in CONCEPT_CATEGORIES]
     check(f"PS: 고정 카테고리가 비어 있지 않다 ({len(ids)}개)", len(ids) >= 5)
     check("PS: 카테고리 ID 중복 없음", len(set(ids)) == len(ids))
-    kinds = {c[2] for c in CATALOG_CATEGORIES + CONCEPT_CATEGORIES}
+    kinds = {c[2] for c in CATALOG_CATEGORIES} | {c[2] for c in CONCEPT_CATEGORIES}
     check("PS: new/free/upcoming 이 모두 붙는다", {"new", "free", "upcoming"} <= kinds)
 
 
@@ -512,6 +515,123 @@ def test_ps_empty_grid_is_failure() -> None:
           bool(saved) and saved[0].extracted_data.get("content_kind") == "upcoming")
 
 
+def test_ps_category_priority_and_rotation() -> None:
+    """카테고리 순서(=우선순위)와 회전 설정.
+
+    실측 사고(run 250): 한 실행에서 전체를 훑을 시간이 없는데 큰 카테고리를 앞에 둬서
+    시간예산이 거기서 다 소진됐다. 작지만 유일한 공급원인 PreOrders(출시예정 탭)와
+    AllPS4 가 통째로 실행되지 못했다.
+    """
+    from collectors.playstation import CATALOG_CATEGORIES
+
+    names = [c[0] for c in CATALOG_CATEGORIES]
+    check(f"PS: 작고 필수적인 PreOrders 가 맨 앞 ({names})", names[0] == "PreOrders")
+    check("PS: 폭(breadth)용 AllPS4 는 맨 뒤", names[-1] == "AllPS4")
+    check("PS: 할인이 폭보다 먼저", names.index("AllDeals") < names.index("AllPS4"))
+    rot = {c[0]: c[3] for c in CATALOG_CATEGORIES}
+    # 시간예산에 늘 잘리는 큰 카테고리는 회전해야 뒤쪽 상품의 last_seen_at 이 갱신된다
+    check("PS: 큰 카테고리는 회전 켬", rot["AllDeals"] and rot["AllPS4"])
+    check("PS: 한 실행에 다 도는 작은 카테고리는 회전 끔", not rot["PreOrders"])
+
+
+def test_ps_grid_rotation_covers_tail() -> None:
+    """회전을 켜면 앞부분만 반복하지 않고 뒤쪽 구간도 훑는다.
+
+    실측 사고(run 250): AllDeals 5,820건 중 매번 앞 1,700건만 훑었다. 뒤쪽 4,100건은
+    last_seen_at 이 영영 갱신되지 않아 웹에서 사라진다.
+    """
+    import collectors.playstation as ps
+
+    TOTAL = 1000                     # 10페이지짜리 카테고리
+    def page(offset):
+        n = max(0, min(ps.GQL_PAGE_SIZE, TOTAL - offset))
+        return json.dumps({"data": {"categoryGridRetrieve": {
+            "products": [{"__typename": "Product", "id": f"P{offset + i:05d}",
+                          "name": f"게임{offset + i}",
+                          "price": {"basePrice": "1,000원", "discountedPrice": "1,000원"},
+                          "media": [{"type": "IMAGE", "role": "MASTER", "url": "https://x/a.png"}]}
+                         for i in range(n)],
+            "concepts": [], "pageInfo": {"totalCount": TOTAL}}}})
+
+    def run_once(fake_now, rotate):
+        col = ps.PlaystationCollector.__new__(ps.PlaystationCollector)
+        col.pages_found = 0
+        col.save_raw = lambda *a, **k: 1
+        saved: list = []
+        col.save_item = lambda item, raw_id: saved.append(item)
+        col.record_parse_error = lambda *a, **k: None
+        seen: set = set()
+        def fake_fetch(url, **kw):
+            off = int(re.search(r"offset%22%3A(\d+)", url).group(1))
+            return MagicMock(status_code=200, text=page(off))
+        with patch.object(ps, "fetch", side_effect=fake_fetch), \
+             patch.object(ps.time, "time", lambda: fake_now), \
+             patch.object(ps.time, "monotonic", side_effect=[0] + [1] * 400):
+            col._collect_grid("Cat", "cid", None, seen, [], deadline=5, rotate=rotate)
+        return [i.store_product_id for i in saved]
+
+    # 12시간 버킷이 다른 두 실행 — 회전 지점이 서로 달라야 한다.
+    # 첫 페이지는 total 을 알아내야 해서 항상 offset 0 이고, 그 다음부터 회전한다.
+    h12 = 12 * 3600
+    a = run_once(3 * h12, rotate=True)
+    b = run_once(4 * h12, rotate=True)
+    P = 100
+    check(f"PS 회전: 실행마다 2번째 페이지가 다르다 ({a[P]} vs {b[P]})", a[P] != b[P])
+    check(f"PS 회전: 앞부분만 반복하지 않는다 ({a[P]})", a[P] != "P00100")
+    # 감아 돌아 전체를 덮는다 (예산이 충분할 때)
+    check(f"PS 회전: 한 바퀴 돌아 전량 수집 ({len(a)}건)", len(a) == TOTAL)
+    check("PS 회전: 중복 저장 없음", len(set(a)) == len(a))
+    # 회전을 끄면 항상 0 부터
+    c = run_once(3 * h12, rotate=False)
+    check("PS: 회전 끄면 항상 offset 0 부터", c[0] == "P00000" and len(c) == TOTAL)
+
+
+def test_ps_cta_survives_one_failure() -> None:
+    """CTA 오퍼레이션이 한 번 실패했다고 보강 전체를 접지 않는다.
+
+    실측 사고(run 250): 일시적 실패 1회에 _cta_ok 가 꺼지고 죽은 HTML 경로로 내려가
+    300건을 33분 태워 종료일 10건만 얻었다.
+    """
+    from collectors.base import ParsedItem
+    from collectors.playstation import PlaystationCollector, CTA_FAIL_LIMIT
+    from common import config
+
+    def item(pid):
+        return ParsedItem(store_product_id=pid, title=pid, store_url=None, image_url=None,
+                          regular_price=None, sale_price=None, final_price=None,
+                          discount_percent=None, sale_end_at=None, is_on_sale=False,
+                          extracted_data={})
+
+    ok = {"data": {"productRetrieve": {"webctas": [{"type": "ADD_TO_CART", "price": {
+        "applicability": "APPLICABLE", "basePriceValue": 1000, "discountedValue": 1000}}]}}}
+
+    # 중간에 한 번 실패해도 나머지는 계속 채운다
+    seq = [ok, None, ok, ok]
+    col = PlaystationCollector.__new__(PlaystationCollector)
+    col._cta_ok = True; col._cta_fails = 0; col._price_fetched = 0
+    col._job_deadline = float("inf")
+    col._gql_product = lambda op, h, pid: seq.pop(0)
+    old = config.PS_CONCEPT_PRICE_MAX
+    config.PS_CONCEPT_PRICE_MAX = 100
+    try:
+        filled = col._enrich_concept_prices([item("A"), item("B"), item("C"), item("D")])
+    finally:
+        config.PS_CONCEPT_PRICE_MAX = old
+    check(f"PS CTA: 1회 실패는 견딘다 (채운 건수 {filled})", filled == 3 and col._cta_ok)
+
+    # 연속 상한만큼 실패하면 그때 포기한다
+    col2 = PlaystationCollector.__new__(PlaystationCollector)
+    col2._cta_ok = True; col2._cta_fails = 0; col2._price_fetched = 0
+    col2._job_deadline = float("inf")
+    col2._gql_product = lambda op, h, pid: None
+    config.PS_CONCEPT_PRICE_MAX = 100
+    try:
+        col2._enrich_concept_prices([item(f"X{i}") for i in range(CTA_FAIL_LIMIT + 2)])
+    finally:
+        config.PS_CONCEPT_PRICE_MAX = old
+    check(f"PS CTA: 연속 {CTA_FAIL_LIMIT}회 실패하면 포기", not col2._cta_ok)
+
+
 if __name__ == "__main__":
     test_xbox_kind_rank()
     test_merge_covers_per_path_keys()
@@ -526,6 +646,9 @@ if __name__ == "__main__":
     test_ps_concept_price_enrichment()
     test_ps_html_list_path_is_gone()
     test_ps_empty_grid_is_failure()
+    test_ps_category_priority_and_rotation()
+    test_ps_grid_rotation_covers_tail()
+    test_ps_cta_survives_one_failure()
     print()
     if fails:
         print(f"실패 {len(fails)}건: " + ", ".join(fails))

@@ -6,7 +6,9 @@
 읽었다. 소니가 목록을 클라이언트 렌더링으로 바꿔 그 JSON 에서 상품이 사라졌고
 (apolloState 에 내비게이션 5개만 남았다) 수집이 8회 연속 실패했다. HTML 목록 파서는
 0건을 돌려주는 죽은 경로라 지웠다 — 폴백으로 남기면 고장을 조용한 부분 수집으로
-감춘다. 상세 페이지의 할인 종료시각만 정규식으로 읽는 예비 경로가 남아 있다.
+감춘다. 상세 페이지도 같은 이유로 안 읽는다: 종료일 폴백이 300건을 33분 태워
+10건만 얻는 것을 확인하고(run 250) 그 경로도 지웠다. 종료일은 단품 CTA
+오퍼레이션(parse_cta_price)으로만 받는다.
 
 price 객체 예시:
   {
@@ -51,37 +53,6 @@ def _parse_epoch_ms(value) -> str | None:
         return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
     except (ValueError, TypeError, OSError):
         return None
-
-
-# 상세 페이지의 Price 노드에 있는 할인 종료시각. 목록(SkuPrice)엔 없고 상세에만 있다.
-# 한 상세 페이지에 여러 에디션 가격이 있을 수 있어, 같은 price 객체 안의
-# discountedValue(할인가 정수)로 대상 상품을 매칭한다.
-_END_DISCOUNTED_RE = re.compile(
-    r'"endTime":"(\d{13})"[^{}]*?"discountedValue":(\d+)'
-)
-_END_ANY_RE = re.compile(r'"endTime":"(\d{13})"')
-
-
-def parse_detail_end_time(html: str, target_discounted: float | None = None) -> str | None:
-    """상품 상세 HTML(__NEXT_DATA__)에서 할인 종료시각(ISO)을 뽑는다.
-
-    price 객체가 중첩 JSON 문자열로 이스케이프돼 있을 수 있어(\\") 먼저 정규화한다.
-    target_discounted(할인가)와 같은 discountedValue를 가진 endTime을 우선 매칭하고,
-    못 찾으면 첫 endTime을 쓴다. 없으면 None.
-    """
-    if not html:
-        return None
-    norm = html.replace('\\"', '"')
-    pairs = _END_DISCOUNTED_RE.findall(norm)
-    if pairs:
-        if target_discounted is not None:
-            tgt = int(round(target_discounted))
-            for et, dv in pairs:
-                if int(dv) == tgt:
-                    return _parse_epoch_ms(et)
-        return _parse_epoch_ms(pairs[0][0])
-    m = _END_ANY_RE.search(norm)
-    return _parse_epoch_ms(m.group(1)) if m else None
 
 
 # 대표 이미지(카드/캐러셀 첫 장)로 쓸 아트(키아트) 우선순위.
