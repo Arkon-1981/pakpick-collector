@@ -2,7 +2,7 @@ requests>=2.34.2
 beautifulsoup4>=4.15.0
 lxml>=6.1.1
 supabase>=2.5.0
-python-dotenv>=1.0.0
+python-dotenv>=1.2.3
 playwright>=1.62.0
 pywebpush>=2.4.0
 # 에러 모니터링 — SENTRY_DSN 이 있을 때만 켜진다(없으면 no-op)
